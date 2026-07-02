@@ -29,3 +29,9 @@ Thumbs.db
 .env
 .env.*
 *.log
+
+# OWASP ZAP scan reports
+zap_scan.zip
+report_html.html
+report_md.md
+report_json.json
