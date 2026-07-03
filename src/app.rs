@@ -38,13 +38,32 @@ pub fn App() -> impl IntoView {
         <Router>
             <Nav/>
             <main>
-                <Routes fallback=|| view! { <p class="notice">"Page not found."</p> }>
+                <Routes fallback=NotFound>
                     <Route path=StaticSegment("") view=HomePage/>
                     <Route path=(StaticSegment("posts"), ParamSegment("slug")) view=PostPage/>
                     <Route path=StaticSegment("about") view=AboutPage/>
                 </Routes>
             </main>
         </Router>
+    }
+}
+
+#[component]
+fn NotFound() -> impl IntoView {
+    view! {
+        <Title text="A Macdonald — 404"/>
+        <section class="flex flex-col items-center text-center gap-4 py-12">
+            <img
+                src="/404.png"
+                alt="404 — page not found"
+                class="w-full max-w-[420px]"
+            />
+            <h1 class="text-3xl font-bold m-0">"404"</h1>
+            <p class="text-lg text-[var(--muted)] m-0">
+                "This page swam away."
+            </p>
+            <A href="/">"Back to shore"</A>
+        </section>
     }
 }
 
