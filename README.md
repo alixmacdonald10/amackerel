@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="public/favicon-light.png" alt="amackerel" width="240"/>
+</p>
+
 # amackerel
 
 A simple developer blog built with [Leptos](https://github.com/leptos-rs/leptos)
@@ -44,6 +48,7 @@ public/              static assets (favicon, etc.)
 end2end/             Playwright end-to-end tests
 Dockerfile           two-stage Alpine build (nightly builder → tiny runtime)
 .github/workflows/   CI/CD pipeline
+infrastructure/      OpenTofu/Terraform: DigitalOcean droplet + cloud-init startup
 ```
 
 ## Running
@@ -170,6 +175,120 @@ The pipeline tags `0.1.1` and publishes on success. Pull the image:
 
 ```bash
 docker pull ghcr.io/alixmacdonald10/amackerel:latest
+```
+
+## Infrastructure
+
+Production runs on a single [DigitalOcean](https://www.digitalocean.com/) droplet,
+provisioned with [OpenTofu](https://opentofu.org/)/Terraform in `infrastructure/`.
+The droplet boots via a cloud-init script that installs Docker + `cloudflared`,
+runs the latest published image, and exposes it through a Cloudflare tunnel.
+
+```text
+infrastructure/main.tf                DO provider, SSH key, droplet resource
+infrastructure/cloud-init.yaml.tftpl  droplet startup script (templated)
+infrastructure/terraform.tfvars       secrets — gitignored, you create this
+```
+
+The startup script installs Docker + `cloudflared`, then runs two systemd
+services: `amackerel.service` (the app) and `watchtower.service` (auto-updater).
+
+### How it fits together
+
+```mermaid
+flowchart LR
+    internet([Internet]) -->|HTTPS 443| edge[Cloudflare edge]
+    edge -->|tunnel| cfd[cloudflared<br/>on droplet]
+    cfd -->|http://localhost:8080| app[amackerel container<br/>127.0.0.1:8080]
+```
+
+- The container binds **`127.0.0.1:8080` only** — port 8080 is never exposed on the
+  droplet's public IP. All traffic arrives through the Cloudflare tunnel.
+- Cloudflare terminates TLS at its edge (443) and forwards to `localhost:8080`.
+  The ingress rule (hostname → `http://localhost:8080`) is set **dashboard-side**
+  on the named tunnel.
+- `amackerel.service` (systemd) pulls `ghcr.io/alixmacdonald10/amackerel:latest`
+  and runs it with `Restart=always`.
+- `watchtower.service` runs [Watchtower](https://github.com/nicholas-fedor/watchtower),
+  which polls the registry every 5 min and recreates the container **only when
+  the `:latest` digest changes** — so a new release auto-deploys with no SSH.
+  `--cleanup` prunes the superseded image. Force an immediate redeploy with
+  `systemctl restart amackerel`.
+
+### Prerequisites
+
+1. A DigitalOcean API token.
+2. An SSH key at `~/.ssh/id_ed25519_do_amackerel.pub` (path in `main.tf`).
+3. A Cloudflare **named tunnel** created in the dashboard, with an ingress rule
+   pointing your hostname at `http://localhost:8080`. Copy its tunnel token.
+
+### Deploying
+
+Create `infrastructure/terraform.tfvars` (gitignored — never commit it):
+
+```hcl
+do_token        = "dop_v1_..."
+cf_tunnel_token = "eyJ..."
+# image = "ghcr.io/alixmacdonald10/amackerel:latest"  # optional override
+```
+
+Then:
+
+```bash
+cd infrastructure
+tofu init      # or: terraform init
+tofu apply
+```
+
+Cloud-init runs on first boot (a few minutes). Once `cloudflared` connects, the
+site is live at your tunnel hostname. To ship a new build, just publish a release
+(bump `Cargo.toml`) — Watchtower picks up the new `:latest` within ~5 min and
+redeploys automatically. No SSH needed.
+
+> **Secrets:** `terraform.tfvars` holds live credentials. It's gitignored, but
+> keep it off shared machines and rotate the tokens if they leak. You can also
+> pass them via `-var=...` or `TF_VAR_do_token` / `TF_VAR_cf_tunnel_token` env
+> vars instead of a file.
+
+### Troubleshooting
+
+SSH in (`ssh root@<droplet-ip>`), then work top-down — first-boot setup, then app,
+then tunnel:
+
+```bash
+# Did the startup script finish? (errors: [] means clean)
+cloud-init status --long
+tail -n 50 /var/log/cloud-init-output.log      # full boot-time output
+
+# App: service up, container running, responding on localhost:8080?
+systemctl status amackerel --no-pager
+docker ps -a                                   # STATUS should be "Up"
+docker logs amackerel --tail 50
+curl -sS -o /dev/null -w "%{http_code}\n" http://localhost:8080   # expect 200
+
+# Auto-updater
+systemctl status watchtower --no-pager
+journalctl -u watchtower --no-pager -n 50
+
+# Tunnel: connected to Cloudflare edge?
+systemctl status cloudflared --no-pager
+journalctl -u cloudflared --no-pager -n 50
+```
+
+Common cases:
+
+| Symptom | Likely cause / fix |
+|---------|--------------------|
+| `cloud-init status` shows `error` | read `cloud-init-output.log` — apt or image pull failed on boot |
+| container not in `docker ps` | bad image pull; `journalctl -u amackerel` (GHCR 404? tag typo?) |
+| `curl` ≠ `200` | app crashed inside container — `docker logs amackerel` |
+| app returns 200 but site is down | tunnel: check `cloudflared` logs **and** the dashboard ingress rule points at `http://localhost:8080` |
+| `watchtower` failing to start | `journalctl -u watchtower`; often a Docker API-version mismatch after a Docker upgrade |
+
+Force an immediate redeploy of the latest image (bypass the 5-min poll):
+
+```bash
+systemctl restart amackerel
 ```
 
 ## Deploying without the toolchain

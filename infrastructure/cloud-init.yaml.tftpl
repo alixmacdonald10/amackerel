@@ -1,0 +1,80 @@
+#cloud-config
+# Startup script for the amackerel prod droplet.
+# - installs Docker + cloudflared
+# - runs the latest amackerel image bound to 127.0.0.1:8080 (not exposed publicly)
+# - installs the Cloudflare tunnel as a service (ingress hostname -> http://localhost:8080
+#   is configured dashboard-side on the named tunnel)
+
+package_update: true
+package_upgrade: true
+
+write_files:
+  # systemd unit that (re)pulls the latest image and runs it. Keeping this as a
+  # unit means `systemctl restart amackerel` redeploys the newest :latest.
+  - path: /etc/systemd/system/amackerel.service
+    permissions: "0644"
+    content: |
+      [Unit]
+      Description=amackerel web app
+      Requires=docker.service
+      After=docker.service network-online.target
+      Wants=network-online.target
+
+      [Service]
+      Restart=always
+      RestartSec=5
+      TimeoutStartSec=300
+      ExecStartPre=-/usr/bin/docker rm -f amackerel
+      ExecStartPre=/usr/bin/docker pull ${image}
+      ExecStart=/usr/bin/docker run --rm --name amackerel \
+        -p 127.0.0.1:8080:8080 \
+        ${image}
+      ExecStop=/usr/bin/docker stop amackerel
+
+      [Install]
+      WantedBy=multi-user.target
+
+  # Watchtower: polls the registry and recreates the amackerel container only
+  # when the :latest digest actually changes (--cleanup prunes the old image).
+  - path: /etc/systemd/system/watchtower.service
+    permissions: "0644"
+    content: |
+      [Unit]
+      Description=watchtower auto-updater for amackerel
+      Requires=docker.service
+      After=docker.service amackerel.service
+
+      [Service]
+      Restart=always
+      RestartSec=5
+      ExecStartPre=-/usr/bin/docker rm -f watchtower
+      ExecStart=/usr/bin/docker run --rm --name watchtower \
+        -v /var/run/docker.sock:/var/run/docker.sock \
+        nickfedor/watchtower --interval 300 --cleanup amackerel
+      ExecStop=/usr/bin/docker stop watchtower
+
+      [Install]
+      WantedBy=multi-user.target
+
+runcmd:
+  # Docker
+  - install -m 0755 -d /etc/apt/keyrings
+  - curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
+  - chmod a+r /etc/apt/keyrings/docker.asc
+  - echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo $VERSION_CODENAME) stable" > /etc/apt/sources.list.d/docker.list
+
+  # cloudflared
+  - mkdir -p --mode=0755 /usr/share/keyrings
+  - curl -fsSL https://pkg.cloudflare.com/cloudflare-main.gpg -o /usr/share/keyrings/cloudflare-main.gpg
+  - echo "deb [signed-by=/usr/share/keyrings/cloudflare-main.gpg] https://pkg.cloudflare.com/cloudflared any main" > /etc/apt/sources.list.d/cloudflared.list
+
+  - apt-get update
+  - DEBIAN_FRONTEND=noninteractive apt-get install -y docker-ce docker-ce-cli containerd.io cloudflared
+
+  # amackerel app on 127.0.0.1:8080 + watchtower auto-updater
+  - systemctl daemon-reload
+  - systemctl enable --now amackerel.service
+  - systemctl enable --now watchtower.service
+
+  # Cloudflare tunnel (edge 443 -> http://localhost:8080 via dashboard ingress)
+  - cloudflared service install ${cf_tunnel_token}
