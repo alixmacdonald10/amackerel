@@ -17,7 +17,6 @@ env:
   IMAGE: ghcr.io/${{ github.repository }}
 
 jobs:
-  # ── Resolve release version from Cargo.toml ─────────────────────────────
   version:
     name: Resolve version
     runs-on: ubuntu-latest
@@ -46,7 +45,6 @@ jobs:
             echo "should_release=true" >> "$GITHUB_OUTPUT"
           fi
 
-  # ── Stage 1: security audit ─────────────────────────────────────────────
   audit:
     name: Security audit (cargo audit)
     runs-on: ubuntu-latest
@@ -57,7 +55,6 @@ jobs:
           tool: cargo-audit
       - run: cargo audit
 
-  # ── Stage 2: tests (unit + e2e run simultaneously, after audit) ─────────
   unit-tests:
     name: Unit tests (cargo test)
     runs-on: ubuntu-latest
@@ -91,6 +88,15 @@ jobs:
         run: |
           npm ci
           npx playwright install --with-deps chromium firefox webkit
+      # cargo-leptos auto-downloads the tailwindcss standalone binary, but its
+      # extraction of the Tailwind v4 bare binary is unreliable on a cold CI
+      # cache. Install it on PATH so cargo-leptos uses it instead of downloading.
+      - name: Install Tailwind CSS standalone
+        run: |
+          curl -fsSLo /usr/local/bin/tailwindcss \
+            https://github.com/tailwindlabs/tailwindcss/releases/download/v4.2.1/tailwindcss-linux-x64
+          chmod +x /usr/local/bin/tailwindcss
+          tailwindcss --help >/dev/null
       # Builds the app, serves it on :3000, then runs `npx playwright test`.
       - name: Run end-to-end tests
         run: cargo leptos end-to-end
@@ -101,7 +107,6 @@ jobs:
           path: end2end/playwright-report/
           retention-days: 7
 
-  # ── Stage 3: build image, run it, OWASP ZAP scan ────────────────────────
   zap-scan:
     name: Build + OWASP ZAP scan
     runs-on: ubuntu-latest
@@ -150,7 +155,6 @@ jobs:
           path: image.tar.gz
           retention-days: 1
 
-  # ── Stage 4: tag the release + publish the scanned image to GHCR ────────
   release:
     name: Tag + publish to GHCR
     runs-on: ubuntu-latest
