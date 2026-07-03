@@ -5,6 +5,26 @@ terraform {
       version = "~> 2.0"
     }
   }
+
+  # State stored in Cloudflare R2 (S3-compatible).
+  # Credentials via r2.backend.hcl.
+  backend "s3" {
+    bucket = "amackerel-iac"
+    key    = "terraform.tfstate"
+    region = "auto"
+
+    endpoints = {
+      s3 = "https://0a03eb03e9d2b915d12d7e813bca1f9e.r2.cloudflarestorage.com"
+    }
+
+    # R2 is not real S3 — skip AWS-specific validation/calls.
+    skip_credentials_validation = true
+    skip_region_validation      = true
+    skip_metadata_api_check     = true
+    skip_requesting_account_id  = true
+    skip_s3_checksum            = true
+    use_path_style              = true
+  }
 }
 
 # Set the variable value in *.tfvars file
@@ -49,4 +69,29 @@ resource "digitalocean_droplet" "amackerel" {
     image           = var.image
     cf_tunnel_token = var.cf_tunnel_token
   })
+}
+
+resource "digitalocean_firewall" "amackerel" {
+  name        = "amackerel-waf"
+  droplet_ids = [digitalocean_droplet.amackerel.id]
+  tags        = ["amackerel", "prod"]
+  # ssh inbound
+  inbound_rule {
+    protocol         = "tcp"
+    port_range       = "22"
+    source_addresses = ["0.0.0.0/0", "::/0"]
+  }
+
+  # all tcp or udp outbound
+  outbound_rule {
+    protocol              = "tcp"
+    port_range            = "1-65535"
+    destination_addresses = ["0.0.0.0/0", "::/0"]
+  }
+
+  outbound_rule {
+    protocol              = "udp"
+    port_range            = "1-65535"
+    destination_addresses = ["0.0.0.0/0", "::/0"]
+  }
 }
