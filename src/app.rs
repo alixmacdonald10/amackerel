@@ -38,7 +38,7 @@ pub fn App() -> impl IntoView {
         <Router>
             <Nav/>
             <main>
-                <Routes fallback=NotFound>
+                <Routes fallback=NotFound transition=true>
                     <Route path=StaticSegment("") view=HomePage/>
                     <Route path=(StaticSegment("posts"), ParamSegment("slug")) view=PostPage/>
                     <Route path=StaticSegment("about") view=AboutPage/>
