@@ -111,7 +111,7 @@ fn HomePage() -> impl IntoView {
     view! {
         <section class="bio">
             <p class="text-lg leading-relaxed text-[var(--muted)] m-0">
-                "Take a look at my musings and half-finished experiments below, "
+                "Trawl through my musings and half-finished experiments below, "
                 "or learn more "<A href="/about">"about me"</A>"."
             </p>
         </section>
@@ -182,8 +182,7 @@ fn AboutPage() -> impl IntoView {
 
             <p class="about-lead">
                 "A "<span class="hl">"senior software engineer"</span>" specialising in backend and "
-                "infrastructure, and an ex-Chartered Mechanical Engineer who left it all behind to "
-                "embark on a software career."
+                "infrastructure, and an ex-Chartered Mechanical Engineer who decided to cast his net a little wider."
             </p>
 
             <p>
