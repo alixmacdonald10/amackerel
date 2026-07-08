@@ -44,6 +44,7 @@ pub fn App() -> impl IntoView {
                     <Route path=StaticSegment("about") view=AboutPage/>
                 </Routes>
             </main>
+            <Footer/>
         </Router>
     }
 }
@@ -90,6 +91,19 @@ fn Nav() -> impl IntoView {
     }
 }
 
+
+#[component]
+fn Footer() -> impl IntoView {
+    let version_text = format!("Build with version {}", env!("CARGO_PKG_VERSION"));
+
+    view! {
+        <footer class="fixed bottom-3 right-4 z-50">
+            <p class="text-xs font-mono tracking-tight text-[var(--muted)] opacity-60 hover:opacity-100 transition-opacity m-0">
+                {version_text}
+            </p>
+        </footer>
+    }
+}
 #[component]
 fn HomePage() -> impl IntoView {
     let posts = Resource::new(|| (), |_| async move { list_posts().await });
