@@ -94,7 +94,7 @@ fn Nav() -> impl IntoView {
 
 #[component]
 fn Footer() -> impl IntoView {
-    let version_text = format!("Build with version {}", env!("CARGO_PKG_VERSION"));
+    let version_text = format!("v{}", env!("CARGO_PKG_VERSION"));
 
     view! {
         <footer class="fixed bottom-3 right-4 z-50">
