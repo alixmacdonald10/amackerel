@@ -104,9 +104,18 @@ fn HomePage() -> impl IntoView {
         <h2 class="section-title">"Posts"</h2>
         <Suspense fallback=move || view! { <p class="notice">"Loading posts…"</p> }>
             {move || posts.get().map(|res| match res {
-                Ok(list) if list.is_empty() => {
-                    view! { <p class="notice">"No posts yet! Check back in later."</p> }.into_any()
-                }
+                Ok(list) if list.is_empty() => view! {
+                    <section class="flex flex-col items-center text-center gap-4 py-12">
+                        <img
+                            src="/no-posts.png"
+                            alt="No posts yet"
+                            class="w-full max-w-[420px]"
+                        />
+                        <p class="text-lg text-[var(--muted)] m-0">
+                            "Nothing here yet, I'm still fishing for ideas."
+                        </p>
+                    </section>
+                }.into_any(),
                 Ok(list) => view! {
                     <ul class="post-list">
                         {list.into_iter().map(|m| view! {
