@@ -29,3 +29,9 @@ zap_scan.zip
 report_html.html
 report_md.md
 report_json.json
+
+# Infrastructure
+terraform.tfstate*
+.terraform*
+*.tfvars
+*.tfvars.json
