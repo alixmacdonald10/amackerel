@@ -103,62 +103,70 @@ or hydration breaks.
 
 ## CI/CD
 
-`.github/workflows/ci.yml` runs on pushes to `main` and on `X.Y.Z` semver tags.
+`.github/workflows/ci.yml` runs on every push to `main`. The release version is
+read from `Cargo.toml`. When tests + scan pass **and** that version isn't already
+tagged, the pipeline tags the commit, then builds and publishes the image.
 
 ```mermaid
 flowchart TD
-    push([Push to main / X.Y.Z tag])
+    push([Push to main])
     push --> audit[audit<br/>cargo audit]
+    push --> version[version<br/>read Cargo.toml]
 
     audit --> unit[unit-tests<br/>cargo test]
     audit --> e2e[e2e-tests<br/>Playwright]
 
-    subgraph release [Release path — tag pushes only]
+    subgraph gated [Only when version is new & unreleased]
         direction TB
-        version[version<br/>require semver tag]
         zap[zap-scan<br/>build image + OWASP ZAP]
-        publish[publish<br/>push to GHCR]
-        version --> zap
-        unit --> zap
-        e2e --> zap
-        zap -->|scan passes| publish
+        release[release<br/>git tag + push to GHCR]
+        zap -->|scan passes| release
     end
 
-    version -.->|no valid tag → fail| stop([Pipeline fails])
-    zap -.->|alerts → fail| stop
-    publish --> ghcr([ghcr.io/&lt;owner&gt;/amackerel<br/>:version + :latest])
+    version -->|new version| zap
+    unit --> zap
+    e2e --> zap
+
+    zap -.->|alerts → fail| stop([Pipeline fails])
+    version -.->|version already tagged → skip| skip([No release])
+    release --> tag([git tag X.Y.Z])
+    release --> ghcr([ghcr.io/&lt;owner&gt;/amackerel<br/>:version + :latest])
 
     classDef gate fill:#fde68a,stroke:#b45309,color:#111;
     classDef ship fill:#bbf7d0,stroke:#15803d,color:#111;
     class version,zap gate;
-    class publish,ghcr ship;
+    class release,tag,ghcr ship;
 ```
 
 | Stage | What it does |
 |-------|--------------|
+| **version** | reads `Cargo.toml` version; releases only if that tag doesn't exist yet |
 | **audit** | `cargo audit` — fails on any advisory |
 | **unit-tests** | `cargo test` (runs in parallel with e2e) |
 | **e2e-tests** | Playwright suite (runs in parallel with unit) |
-| **version** | requires a valid semver tag on the commit (release only) |
-| **zap-scan** | builds the image, runs it, OWASP ZAP baseline scan (release only) |
-| **publish** | pushes the *scanned* image to GHCR (release only) |
+| **zap-scan** | builds the image, runs it, OWASP ZAP baseline scan |
+| **release** | creates the `X.Y.Z` git tag, then pushes the *scanned* image to GHCR |
 
-- **Push to `main`** → audit + tests only. No image is published.
-- **Push a `X.Y.Z` tag** (e.g. `0.1.1`, no `v` prefix) → full pipeline; on success
-  the exact scanned image is published to `ghcr.io/<owner>/amackerel:<version>`
-  and `:latest`.
+- Every push to `main` runs audit + tests.
+- If the `Cargo.toml` version is **new** (no matching tag), on success the pipeline
+  tags the commit `X.Y.Z` (bare semver, no `v`) and publishes
+  `ghcr.io/<owner>/amackerel:<version>` and `:latest`.
+- If the version is **unchanged**, the release path is skipped — bump the version
+  in `Cargo.toml` to cut a new release.
 
-The image ZAP scans is saved and re-loaded by the publish job, so you publish
+The image ZAP scans is saved and re-loaded by the release job, so you publish
 precisely the bytes that were tested (not a rebuild).
 
 ### Cutting a release
 
-```bash
-git tag 0.1.1
-git push origin 0.1.1
+Bump the version in `Cargo.toml`, then push to `main`:
+
+```toml
+[package]
+version = "0.1.1"
 ```
 
-Pull the published image:
+The pipeline tags `0.1.1` and publishes on success. Pull the image:
 
 ```bash
 docker pull ghcr.io/alixmacdonald10/amackerel:latest

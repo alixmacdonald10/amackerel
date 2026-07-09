@@ -3,7 +3,6 @@ name: CI
 on:
   push:
     branches: [main]
-    tags: ['[0-9]*.[0-9]*.[0-9]*']
   workflow_dispatch:
 
 # Cancel superseded runs on the same ref.
@@ -18,33 +17,36 @@ env:
   IMAGE: ghcr.io/${{ github.repository }}
 
 jobs:
-  # ── Gate: current commit must carry a valid semver git tag ──────────────
+  # ── Resolve release version from Cargo.toml ─────────────────────────────
   version:
-    name: Resolve semver tag
+    name: Resolve version
     runs-on: ubuntu-latest
-    # Release path only runs for tag pushes; plain main pushes run tests only.
-    if: startsWith(github.ref, 'refs/tags/')
     outputs:
-      version: ${{ steps.tag.outputs.version }}
+      version: ${{ steps.v.outputs.version }}
+      should_release: ${{ steps.v.outputs.should_release }}
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
           fetch-tags: true
-      - id: tag
-        name: Require semver tag on HEAD
+      - id: v
+        name: Read version + check tag
         run: |
-          # Semver tags on this exact commit (e.g. 0.1.1), highest wins.
-          TAG=$(git tag --points-at HEAD \
-            | grep -E '^[0-9]+\.[0-9]+\.[0-9]+([-+][0-9A-Za-z.-]+)?$' \
-            | sort -V | tail -n1)
-          if [ -z "$TAG" ]; then
-            echo "::error::No valid semver tag on this commit. Tag the release, e.g. 'git tag 0.1.1 && git push origin 0.1.1'."
+          VERSION=$(grep -m1 '^version[[:space:]]*=' Cargo.toml | sed -E 's/.*"([^"]+)".*/\1/')
+          if ! echo "$VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+([-+][0-9A-Za-z.-]+)?$'; then
+            echo "::error::Cargo.toml version '$VERSION' is not valid semver (expected e.g. 0.1.1)."
             exit 1
           fi
-          echo "version=$TAG" >> "$GITHUB_OUTPUT"
-          echo "Using version: $TAG"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          if git rev-parse "refs/tags/$VERSION" >/dev/null 2>&1; then
+            echo "Tag $VERSION already exists — nothing to release. Bump the version in Cargo.toml to publish."
+            echo "should_release=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "Version $VERSION is new — will release on success."
+            echo "should_release=true" >> "$GITHUB_OUTPUT"
+          fi
 
+  # ── Stage 1: security audit ─────────────────────────────────────────────
   audit:
     name: Security audit (cargo audit)
     runs-on: ubuntu-latest
@@ -55,6 +57,7 @@ jobs:
           tool: cargo-audit
       - run: cargo audit
 
+  # ── Stage 2: tests (unit + e2e run simultaneously, after audit) ─────────
   unit-tests:
     name: Unit tests (cargo test)
     runs-on: ubuntu-latest
@@ -98,11 +101,13 @@ jobs:
           path: end2end/playwright-report/
           retention-days: 7
 
+  # ── Stage 3: build image, run it, OWASP ZAP scan ────────────────────────
   zap-scan:
     name: Build + OWASP ZAP scan
     runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/')
     needs: [version, unit-tests, e2e-tests]
+    # Only build/scan when there is a new version to release.
+    if: needs.version.outputs.should_release == 'true'
     steps:
       - uses: actions/checkout@v4
 
@@ -136,7 +141,7 @@ jobs:
         run: docker rm -f app || true
 
       # Only reached if the ZAP scan passed — save the *scanned* image so
-      # publish pushes exactly what was tested.
+      # release publishes exactly what was tested.
       - name: Export scanned image
         run: docker save app:ci | gzip > image.tar.gz
       - uses: actions/upload-artifact@v4
@@ -145,18 +150,27 @@ jobs:
           path: image.tar.gz
           retention-days: 1
 
-  # publish scanned image to GitHub Packages (GHCR)
-  publish:
-    name: Publish image to GHCR
+  # ── Stage 4: tag the release + publish the scanned image to GHCR ────────
+  release:
+    name: Tag + publish to GHCR
     runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/')
     needs: [version, zap-scan]
+    if: needs.version.outputs.should_release == 'true'
     permissions:
-      contents: read
+      contents: write
       packages: write
     env:
       VERSION: ${{ needs.version.outputs.version }}
     steps:
+      - uses: actions/checkout@v4
+
+      - name: Create and push git tag
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag "$VERSION"
+          git push origin "$VERSION"
+
       - uses: actions/download-artifact@v4
         with:
           name: docker-image
@@ -171,7 +185,7 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Tag and push
+      - name: Tag and push image
         run: |
           IMAGE_LC=$(echo "$IMAGE" | tr '[:upper:]' '[:lower:]')
           docker tag app:ci "$IMAGE_LC:${VERSION}"
