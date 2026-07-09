@@ -1,82 +1,93 @@
-<picture>
-    <source srcset="https://raw.githubusercontent.com/leptos-rs/leptos/main/docs/logos/Leptos_logo_Solid_White.svg" media="(prefers-color-scheme: dark)">
-    <img src="https://raw.githubusercontent.com/leptos-rs/leptos/main/docs/logos/Leptos_logo_RGB.svg" alt="Leptos Logo">
-</picture>
+# amackerel
 
-# Leptos Axum Starter Template
+A simple developer blog built with [Leptos](https://github.com/leptos-rs/leptos)
+(SSR + hydration) on [Axum](https://github.com/tokio-rs/axum). Write posts as
+markdown files, drop them in `posts/`, and they render as pages.
 
-This is a template for use with the [Leptos](https://github.com/leptos-rs/leptos) web framework and the [cargo-leptos](https://github.com/akesson/cargo-leptos) tool using [Axum](https://github.com/tokio-rs/axum).
+## Features
 
-## Creating your template repo
+- **Blog-first home page** (`/`) — short bio banner, then all posts newest-first.
+- **Markdown posts** — each `posts/*.md` file becomes a page at `/posts/<slug>`.
+- **About page** (`/about`) — separate "who I am" page, linked in the nav.
+- Rendered server-side with `pulldown-cmark`; frontmatter drives title/date/description.
 
-If you don't have `cargo-leptos` installed you can install it with
+## Writing a post
 
-```bash
-cargo install cargo-leptos --locked
+Create a file in `posts/`, e.g. `posts/my-project.md`:
+
+```md
+---
+title: "My Project"
+date: "2026-07-02"
+description: "Short summary shown in the post list."
+---
+
+# My Project
+
+Standard markdown below — headings, lists, code blocks, tables, quotes.
 ```
 
-Then run
-```bash
-cargo leptos new --git https://github.com/leptos-rs/start-axum
+- The **filename** (minus `.md`) is the URL slug — this lives at `/posts/my-project`.
+- Posts are sorted **newest-first** by the `date` field.
+- `title`, `date`, `description` are optional; a missing `title` falls back to the slug.
+
+## Project layout
+
+```text
+posts/          markdown blog posts (read at runtime by the server)
+src/app.rs      routes, nav, and page components (edit bio + About here)
+src/blog.rs     post types, markdown rendering, list_posts/get_post server fns
+style/main.scss site styling
+public/         static assets (favicon, etc.)
 ```
 
-to generate a new project template.
-
-```bash
-cd amackerel
-```
-
-to go to your newly created project.
-Feel free to explore the project structure, but the best place to start with your application code is in `src/app.rs`.
-Additionally, Cargo.toml may need updating as new versions of the dependencies are released, especially if things are not working after a `cargo update`.
-
-## Running your project
+## Running
 
 ```bash
 cargo leptos watch
 ```
 
-## Installing Additional Tools
+Open http://127.0.0.1:3000
 
-By default, `cargo-leptos` uses `nightly` Rust, `cargo-generate`, and `sass`. If you run into any trouble, you may need to install one or more of these tools.
+## Prerequisites
 
-1. `rustup toolchain install nightly --allow-downgrade` - make sure you have Rust nightly
-2. `rustup target add wasm32-unknown-unknown` - add the ability to compile Rust to WebAssembly
-3. `cargo install cargo-generate` - install `cargo-generate` binary (should be installed automatically in future)
-4. `npm install -g sass` - install `dart-sass` (should be optional in future
-5. Run `npm install` in end2end subdirectory before test
+`cargo-leptos` uses nightly Rust and dart-sass. If something is missing:
 
-## Compiling for Release
+1. `cargo install cargo-leptos --locked`
+2. `rustup toolchain install nightly --allow-downgrade`
+3. `rustup target add wasm32-unknown-unknown`
+4. `npm install -g sass`
+5. `npm install` in the `end2end` directory before running tests
+
+## Building for release
+
 ```bash
 cargo leptos build --release
 ```
 
-Will generate your server binary in target/release and your site package in target/site
+Produces the server binary in `target/release` and the site package in `target/site`.
 
-## Testing Your Project
+> **Note:** the server reads `posts/` at runtime relative to its working directory.
+> When deploying, the `posts/` folder must sit next to where you run the binary.
+
+## Testing
+
 ```bash
 cargo leptos end-to-end
 ```
 
-```bash
-cargo leptos end-to-end --release
-```
+Uses Playwright; tests live in `end2end/tests`.
 
-Cargo-leptos uses Playwright as the end-to-end test tool.
-Tests are located in end2end/tests directory.
+## Deploying without the toolchain
 
-## Executing a Server on a Remote Machine Without the Toolchain
-After running a `cargo leptos build --release` the minimum files needed are:
+After `cargo leptos build --release`, the minimum files needed are:
 
-1. The server binary located in `target/server/release`
-2. The `site` directory and all files within located in `target/site`
+1. The server binary in `target/release`
+2. The `target/site` directory and its contents
+3. The `posts/` directory (read at runtime)
 
-Copy these files to your remote server. The directory structure should be:
-```text
-amackerel
-site/
-```
-Set the following environment variables (updating for your project as needed):
+Set these environment variables as needed:
+
 ```sh
 export LEPTOS_OUTPUT_NAME="amackerel"
 export LEPTOS_SITE_ROOT="site"
@@ -84,8 +95,9 @@ export LEPTOS_SITE_PKG_DIR="pkg"
 export LEPTOS_SITE_ADDR="127.0.0.1:3000"
 export LEPTOS_RELOAD_PORT="3001"
 ```
-Finally, run the server binary.
 
-## Licensing
+Then run the server binary.
 
-This template itself is released under the Unlicense. You should replace the LICENSE for your own application with an appropriate license if you plan to release it publicly.
+## License
+
+See [LICENSE](LICENSE).

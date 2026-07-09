@@ -1,0 +1,31 @@
+# Build output (rebuilt inside the image)
+target/
+debug/
+
+# Not needed to build/run the server
+end2end/
+node_modules/
+playwright-report/
+test-results/
+
+# VCS + Docker meta
+.git/
+.gitignore
+.dockerignore
+Dockerfile
+
+# Docs / license
+README.md
+LICENSE
+
+# Editor / OS cruft
+.DS_Store
+Thumbs.db
+# .idea/
+.vscode/
+*.swp
+
+# Env / logs
+.env
+.env.*
+*.log
