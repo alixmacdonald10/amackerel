@@ -32,6 +32,7 @@ main {
 	max-width: 720px;
 	margin: 0 auto;
 	padding: 2rem 1.25rem 4rem;
+	view-transition-name: page;
 }
 
 .bio h1 {
@@ -155,4 +156,28 @@ main {
 	padding: 0 0.1em;
 }
 
+}
+
+/* Page transition: old slides left off-screen, new enters from the right. */
+@keyframes page-slide-out {
+	to { transform: translateX(-100vw); }
+}
+
+@keyframes page-slide-in {
+	from { transform: translateX(100vw); }
+}
+
+::view-transition-old(page) {
+	animation: 700ms cubic-bezier(0.16, 1, 0.3, 1) both page-slide-out;
+}
+
+::view-transition-new(page) {
+	animation: 700ms cubic-bezier(0.16, 1, 0.3, 1) both page-slide-in;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	::view-transition-old(page),
+	::view-transition-new(page) {
+		animation: none;
+	}
 }
