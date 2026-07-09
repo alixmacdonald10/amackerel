@@ -51,15 +51,18 @@ pub fn App() -> impl IntoView {
 #[component]
 fn Nav() -> impl IntoView {
     view! {
-        <header class="site-header">
+        <header class="max-w-[720px] mx-auto px-5 py-4 flex flex-col items-center text-center gap-2 border-b border-[var(--border)]">
             <A href="/">
-                <span class="brand-row">
-                    <img src="/favicon-light.png" alt="" class="logo"/>
-                    <span class="brand">"A Macdonald"</span>
-                </span>
-                <span class="tagline">"Trying My Best To Keep It Stupidly Simple In A World Of Complexity"</span>
+                <img
+                    src="/favicon-light.png"
+                    alt="A Macdonald"
+                    class="w-full max-w-[320px]"
+                />
             </A>
-            <nav>
+            <p class="text-sm text-[var(--muted)] m-0">
+                "Trying My Best To Keep It Stupidly Simple In A World Of Complexity"
+            </p>
+            <nav class="flex gap-6 text-[0.95rem] [&_a]:text-[var(--muted)] [&_a]:no-underline [&_a:hover]:text-[var(--fg)]">
                 <A href="/">"Blog"</A>
                 <A href="/about">"About"</A>
                 <a href="https://github.com/alixmacdonald10" target="_blank" rel="noopener">"GitHub"</a>
@@ -74,11 +77,10 @@ fn HomePage() -> impl IntoView {
 
     view! {
         <section class="bio">
-            <p>
-                "Take a look at my musings and half-finished experiments below. "
+            <p class="text-lg leading-relaxed text-[var(--muted)] m-0">
+                "Take a look at my musings and half-finished experiments below, "
+                "or learn more "<A href="/about">"about me"</A>"."
             </p>
-            <p> "Or you can always learn more "<A href="/about">"about me"</A></p>
-
         </section>
         <h2 class="section-title">"Posts"</h2>
         <Suspense fallback=move || view! { <p class="notice">"Loading posts…"</p> }>
@@ -134,10 +136,21 @@ fn PostPage() -> impl IntoView {
 fn AboutPage() -> impl IntoView {
     view! {
         <article class="post about">
-            <h1 class="about-lead">"I'm Alix"</h1>
+            <h1 class="text-4xl font-bold mb-4">"I'm Alix"</h1>
+
+            <p class="about-lead">
+                "A "<span class="hl">"senior software engineer"</span>" specialising in backend and "
+                "infrastructure, and an ex-Chartered Mechanical Engineer who left it all behind to "
+                "embark on a software career."
+            </p>
 
             <p>
-                "I have one guiding principle... "<span class="h1">"Keep It Simple Stupid (KISS)"</span>"."
+                "Throughout my career I've picked up two Master's degrees, one in "<span class="hl">"Mechanical Engineering"</span>
+                " and the other in "<span class="hl">"Astronautics & Space Engineering"</span>" (pretty cool I know)."
+            </p>
+
+            <p>
+                "I have one guiding principle... "<span class="hl">"Keep It Simple Stupid (KISS)"</span>"."
             </p>
 
             <p>
@@ -151,11 +164,10 @@ fn AboutPage() -> impl IntoView {
             </p>
 
             <p>
-                "I love "<span class="hl">"Rust"</span>", "
-                <span class="hl">"Postgres"</span>" and "<span class="hl">"Kubernetes"</span>", and I "
+                "I love "<span class="hl">"Rust"</span>" and have used it professionally since "<span class="hl">"2023"</span>". "
+                "I also have a soft spot for "<span class="hl">"Postgres"</span>" and "<span class="hl">"Kubernetes"</span>", and I "
                 "find "<span class="hl">"system design"</span>" genuinely rewarding. I'm perfectly "
-                "good with "<span class="hl">"Python"</span>" too — I just spend the whole time missing "
-                "Rust's compiler."
+                "good with "<span class="hl">"Python"</span>" too, I just miss Rust's compiler."
             </p>
 
             <p>

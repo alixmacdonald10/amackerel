@@ -7,8 +7,10 @@ test.describe("home page", () => {
     await page.goto(`${BASE}/`);
 
     await expect(page).toHaveTitle("A Macdonald — Blog");
-    await expect(page.locator(".site-header .brand")).toHaveText("A Macdonald");
-    await expect(page.locator(".site-header .tagline")).toBeVisible();
+    await expect(
+      page.locator('header a[href="/"] img[alt="A Macdonald"]'),
+    ).toBeVisible();
+    await expect(page.locator("header p")).toContainText("Stupidly Simple");
   });
 
   test("lists posts", async ({ page }) => {
@@ -26,7 +28,7 @@ test.describe("home page", () => {
     await page.goto(`${BASE}/`);
 
     const gh = page.locator(
-      '.site-header nav a[href="https://github.com/alixmacdonald10"]',
+      'header nav a[href="https://github.com/alixmacdonald10"]',
     );
     await expect(gh).toBeVisible();
     await expect(gh).toHaveAttribute("target", "_blank");
@@ -38,14 +40,14 @@ test("post page renders markdown", async ({ page }) => {
   await page.locator('.post-card a[href="/posts/hello-world"]').click();
 
   await expect(page).toHaveURL(`${BASE}/posts/hello-world`);
-  await expect(page.locator("article.post h1")).toBeVisible();
+  await expect(page.locator("article.post > h1")).toBeVisible();
   // Frontmatter title + rendered markdown body.
   await expect(page.locator(".post-body")).not.toBeEmpty();
 });
 
 test("about page loads via nav", async ({ page }) => {
   await page.goto(`${BASE}/`);
-  await page.locator('.site-header nav a', { hasText: "About" }).click();
+  await page.locator("header nav a", { hasText: "About" }).click();
 
   await expect(page).toHaveURL(`${BASE}/about`);
   await expect(page.locator("article.about h1")).toContainText("Alix");
