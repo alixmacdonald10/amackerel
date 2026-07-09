@@ -185,13 +185,20 @@ The droplet boots via a cloud-init script that installs Docker + `cloudflared`,
 runs the latest published image, and exposes it through a Cloudflare tunnel.
 
 ```text
-infrastructure/main.tf                DO provider, SSH key, droplet resource
+infrastructure/main.tf                DO provider, SSH key, droplet, firewall, R2 backend
 infrastructure/cloud-init.yaml.tftpl  droplet startup script (templated)
-infrastructure/terraform.tfvars       secrets — gitignored, you create this
+infrastructure/terraform.tfvars       app secrets — gitignored, you create this
+infrastructure/r2.backend.hcl         R2 state-backend creds — gitignored, you create this
 ```
 
 The startup script installs Docker + `cloudflared`, then runs two systemd
 services: `amackerel.service` (the app) and `watchtower.service` (auto-updater).
+
+State is stored remotely in a **Cloudflare R2 bucket** (`amackerel-iac`) via the
+S3-compatible `backend "s3"` block in `main.tf`. R2 isn't real S3, so the backend
+sets `use_path_style`, `region = "auto"`, and skips the AWS-specific
+validation/metadata calls. Credentials are supplied at init time from
+`r2.backend.hcl` (see [Deploying](#deploying)).
 
 ### How it fits together
 
@@ -204,6 +211,10 @@ flowchart LR
 
 - The container binds **`127.0.0.1:8080` only** — port 8080 is never exposed on the
   droplet's public IP. All traffic arrives through the Cloudflare tunnel.
+- A **DigitalOcean firewall** (`amackerel-waf`) fronts the droplet: inbound allows
+  **only TCP 22 (SSH)**; all other inbound is dropped. Outbound TCP/UDP is open
+  (needed for the tunnel, image pulls, and apt). The public site is never served
+  from the droplet — 443/80 are not open inbound — so the tunnel is the only path in.
 - Cloudflare terminates TLS at its edge (443) and forwards to `localhost:8080`.
   The ingress rule (hostname → `http://localhost:8080`) is set **dashboard-side**
   on the named tunnel.
@@ -217,10 +228,15 @@ flowchart LR
 
 ### Prerequisites
 
-1. A DigitalOcean API token.
+1. A DigitalOcean API token, **scoped** with read/write on: `droplet`, `ssh_key`,
+   `tag`, and `firewall`. Anything narrower and `tofu apply` fails to manage those
+   resources.
 2. An SSH key at `~/.ssh/id_ed25519_do_amackerel.pub` (path in `main.tf`).
 3. A Cloudflare **named tunnel** created in the dashboard, with an ingress rule
    pointing your hostname at `http://localhost:8080`. Copy its tunnel token.
+4. A Cloudflare **R2 bucket** named `amackerel-iac` for Terraform state, plus an
+   **R2 API token** (Cloudflare dashboard → R2 → Manage API Tokens) — gives the
+   Access Key ID / Secret Access Key used by the backend.
 
 ### Deploying
 
@@ -232,12 +248,26 @@ cf_tunnel_token = "eyJ..."
 # image = "ghcr.io/alixmacdonald10/amackerel:latest"  # optional override
 ```
 
+Create `infrastructure/r2.backend.hcl` for the R2 state backend (also gitignored —
+backend config can't read `terraform.tfvars`, so it lives in its own file):
+
+```hcl
+access_key = "<r2-access-key-id>"
+secret_key = "<r2-secret-access-key>"
+```
+
 Then:
 
 ```bash
 cd infrastructure
-tofu init      # or: terraform init
+tofu init -backend-config=r2.backend.hcl      # or: terraform init ...
 tofu apply
+```
+
+Migrating an existing local state into R2 the first time? Add `-migrate-state`:
+
+```bash
+tofu init -migrate-state -backend-config=r2.backend.hcl
 ```
 
 Cloud-init runs on first boot (a few minutes). Once `cloudflared` connects, the
@@ -245,10 +275,12 @@ site is live at your tunnel hostname. To ship a new build, just publish a releas
 (bump `Cargo.toml`) — Watchtower picks up the new `:latest` within ~5 min and
 redeploys automatically. No SSH needed.
 
-> **Secrets:** `terraform.tfvars` holds live credentials. It's gitignored, but
-> keep it off shared machines and rotate the tokens if they leak. You can also
-> pass them via `-var=...` or `TF_VAR_do_token` / `TF_VAR_cf_tunnel_token` env
-> vars instead of a file.
+> **Secrets:** `terraform.tfvars` and `r2.backend.hcl` hold live credentials. Both
+> are gitignored, but keep them off shared machines and rotate the tokens if they
+> leak. App vars can also be passed via `-var=...` or `TF_VAR_do_token` /
+> `TF_VAR_cf_tunnel_token`; the R2 backend creds can instead come from
+> `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` env vars, skipping the
+> `-backend-config` file.
 
 ### Troubleshooting
 
