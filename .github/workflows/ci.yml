@@ -1,0 +1,180 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+    tags: ['[0-9]*.[0-9]*.[0-9]*']
+  workflow_dispatch:
+
+# Cancel superseded runs on the same ref.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  IMAGE: ghcr.io/${{ github.repository }}
+
+jobs:
+  # ── Gate: current commit must carry a valid semver git tag ──────────────
+  version:
+    name: Resolve semver tag
+    runs-on: ubuntu-latest
+    # Release path only runs for tag pushes; plain main pushes run tests only.
+    if: startsWith(github.ref, 'refs/tags/')
+    outputs:
+      version: ${{ steps.tag.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+      - id: tag
+        name: Require semver tag on HEAD
+        run: |
+          # Semver tags on this exact commit (e.g. 0.1.1), highest wins.
+          TAG=$(git tag --points-at HEAD \
+            | grep -E '^[0-9]+\.[0-9]+\.[0-9]+([-+][0-9A-Za-z.-]+)?$' \
+            | sort -V | tail -n1)
+          if [ -z "$TAG" ]; then
+            echo "::error::No valid semver tag on this commit. Tag the release, e.g. 'git tag 0.1.1 && git push origin 0.1.1'."
+            exit 1
+          fi
+          echo "version=$TAG" >> "$GITHUB_OUTPUT"
+          echo "Using version: $TAG"
+
+  audit:
+    name: Security audit (cargo audit)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-audit
+      - run: cargo audit
+
+  unit-tests:
+    name: Unit tests (cargo test)
+    runs-on: ubuntu-latest
+    needs: audit
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@nightly
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo test --features ssr --no-default-features
+
+  e2e-tests:
+    name: E2E tests (Playwright)
+    runs-on: ubuntu-latest
+    needs: audit
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@nightly
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-leptos
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: end2end/package-lock.json
+      - name: Install Playwright + browsers
+        working-directory: end2end
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium firefox webkit
+      # Builds the app, serves it on :3000, then runs `npx playwright test`.
+      - name: Run end-to-end tests
+        run: cargo leptos end-to-end
+      - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() }}
+        with:
+          name: playwright-report
+          path: end2end/playwright-report/
+          retention-days: 7
+
+  zap-scan:
+    name: Build + OWASP ZAP scan
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: [version, unit-tests, e2e-tests]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build Docker image
+        run: docker build -t app:ci .
+
+      - name: Start container
+        run: docker run -d --name app -p 8080:8080 app:ci
+
+      - name: Wait for app to be ready
+        run: |
+          for i in $(seq 1 60); do
+            if curl -sf http://localhost:8080/ >/dev/null; then
+              echo "app is up"; exit 0
+            fi
+            sleep 2
+          done
+          echo "app failed to start"; docker logs app; exit 1
+
+      - name: OWASP ZAP baseline scan
+        uses: zaproxy/action-baseline@v0.14.0
+        with:
+          target: http://localhost:8080
+          # Fail the pipeline on ZAP failures.
+          fail_action: true
+          allow_issue_writing: false
+          rules_file_name: .zap/rules.tsv
+
+      - name: Stop container
+        if: always()
+        run: docker rm -f app || true
+
+      # Only reached if the ZAP scan passed — save the *scanned* image so
+      # publish pushes exactly what was tested.
+      - name: Export scanned image
+        run: docker save app:ci | gzip > image.tar.gz
+      - uses: actions/upload-artifact@v4
+        with:
+          name: docker-image
+          path: image.tar.gz
+          retention-days: 1
+
+  # publish scanned image to GitHub Packages (GHCR)
+  publish:
+    name: Publish image to GHCR
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: [version, zap-scan]
+    permissions:
+      contents: read
+      packages: write
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: docker-image
+
+      - name: Load scanned image
+        run: docker load < image.tar.gz
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Tag and push
+        run: |
+          IMAGE_LC=$(echo "$IMAGE" | tr '[:upper:]' '[:lower:]')
+          docker tag app:ci "$IMAGE_LC:${VERSION}"
+          docker tag app:ci "$IMAGE_LC:latest"
+          docker push "$IMAGE_LC:${VERSION}"
+          docker push "$IMAGE_LC:latest"
