@@ -32,7 +32,7 @@ pub fn App() -> impl IntoView {
     provide_meta_context();
 
     view! {
-        <Stylesheet id="leptos" href="/pkg/amackerel.css"/>
+        <Stylesheet id="leptos" href=concat!("/pkg/amackerel.css?v=", env!("CARGO_PKG_VERSION"))/>
         <Title text="A Macdonald — Blog"/>
 
         <Router>
