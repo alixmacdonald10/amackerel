@@ -80,7 +80,7 @@ fn Nav() -> impl IntoView {
                 />
             </A>
             <p class="text-sm text-[var(--muted)] m-0">
-                "Trying My Best To Keep It Stupidly Simple In A World Of Complexity"
+                "Hooked on keeping it simple"
             </p>
             <nav class="flex gap-6 text-[0.95rem] [&_a]:text-[var(--muted)] [&_a]:no-underline [&_a:hover]:text-[var(--fg)]">
                 <A href="/">"Blog"</A>

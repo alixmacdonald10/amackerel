@@ -10,7 +10,7 @@ test.describe("home page", () => {
     await expect(
       page.locator('header a[href="/"] img[alt="A Macdonald"]'),
     ).toBeVisible();
-    await expect(page.locator("header p")).toContainText("Stupidly Simple");
+    await expect(page.locator("header p")).toContainText("simple");
   });
 
   test("lists posts or shows empty state", async ({ page }) => {
