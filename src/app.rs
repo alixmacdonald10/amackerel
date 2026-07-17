@@ -6,7 +6,8 @@ use leptos_router::{
     ParamSegment, StaticSegment,
 };
 
-use crate::blog::{get_post, list_posts};
+use crate::blog::get_post;
+use crate::projects::list_projects;
 
 pub fn shell(options: LeptosOptions) -> impl IntoView {
     view! {
@@ -33,7 +34,7 @@ pub fn App() -> impl IntoView {
 
     view! {
         <Stylesheet id="leptos" href=concat!("/pkg/amackerel.css?v=", env!("CARGO_PKG_VERSION"))/>
-        <Title text="A Macdonald — Blog"/>
+        <Title text="A Macdonald — Projects"/>
 
         <Router>
             <Nav/>
@@ -82,15 +83,16 @@ fn Nav() -> impl IntoView {
             <p class="text-sm text-[var(--muted)] m-0">
                 "Hooked on keeping it simple"
             </p>
-            <nav class="flex gap-6 text-[0.95rem] [&_a]:text-[var(--muted)] [&_a]:no-underline [&_a:hover]:text-[var(--fg)]">
-                <A href="/">"Blog"</A>
+            <p class="text-xs text-[var(--muted)] m-0 italic">
+                "Beware of fish related puns"
+            </p>            <nav class="flex gap-6 text-[0.95rem] [&_a]:text-[var(--muted)] [&_a]:no-underline [&_a:hover]:text-[var(--fg)]">
+                <A href="/">"Projects"</A>
                 <A href="/about">"About"</A>
                 <a href="https://github.com/alixmacdonald10" target="_blank" rel="noopener">"GitHub"</a>
             </nav>
         </header>
     }
 }
-
 
 #[component]
 fn Footer() -> impl IntoView {
@@ -106,23 +108,23 @@ fn Footer() -> impl IntoView {
 }
 #[component]
 fn HomePage() -> impl IntoView {
-    let posts = Resource::new(|| (), |_| async move { list_posts().await });
+    let projects = Resource::new(|| (), |_| async move { list_projects().await });
 
     view! {
         <section class="bio">
             <p class="text-lg leading-relaxed text-[var(--muted)] m-0">
-                "Trawl through my musings and half-finished experiments below, "
+                "Trawl through the shoal of projects I've been tinkering with "
                 "or learn more "<A href="/about">"about me"</A>"."
             </p>
         </section>
-        <h2 class="section-title">"Posts"</h2>
-        <Suspense fallback=move || view! { <p class="notice">"Loading posts…"</p> }>
-            {move || posts.get().map(|res| match res {
+        <h2 class="section-title">"Projects"</h2>
+        <Suspense fallback=move || view! { <p class="notice">"Loading projects…"</p> }>
+            {move || projects.get().map(|res| match res {
                 Ok(list) if list.is_empty() => view! {
                     <section class="flex flex-col items-center text-center gap-4 py-12">
                         <img
                             src="/no-posts.png"
-                            alt="No posts yet"
+                            alt="No projects yet"
                             class="w-full max-w-[420px]"
                         />
                         <p class="text-lg text-[var(--muted)] m-0">
@@ -132,18 +134,29 @@ fn HomePage() -> impl IntoView {
                 }.into_any(),
                 Ok(list) => view! {
                     <ul class="post-list">
-                        {list.into_iter().map(|m| view! {
-                            <li class="post-card">
-                                <A href=format!("/posts/{}", m.slug)>
-                                    <h3>{m.title}</h3>
-                                </A>
-                                <p class="date">{m.date}</p>
-                                <p class="excerpt">{m.description}</p>
-                            </li>
+                        {list.into_iter().map(|m| {
+                            let languages = m.languages.iter().map(|l| view! {
+                                <span class="lang">{l.clone()}</span>
+                            }).collect_view();
+                            let stars = (m.stars > 0).then(|| view! {
+                                <span class="stars">{format!("★ {}", m.stars)}</span>
+                            });
+                            let has_meta = !m.languages.is_empty() || m.stars > 0;
+                            view! {
+                                <li class="post-card">
+                                    <a class="card-link" href=m.url target="_blank" rel="noopener">
+                                        <h3>{m.name}</h3>
+                                        {has_meta.then(|| view! {
+                                            <p class="card-meta">{languages}{stars}</p>
+                                        })}
+                                        <p class="excerpt">{m.description}</p>
+                                    </a>
+                                </li>
+                            }
                         }).collect_view()}
                     </ul>
                 }.into_any(),
-                Err(_) => view! { <p class="notice">"Failed to load posts."</p> }.into_any(),
+                Err(_) => view! { <p class="notice">"Failed to load projects."</p> }.into_any(),
             })}
         </Suspense>
     }
@@ -214,7 +227,6 @@ fn AboutPage() -> impl IntoView {
             <p>
                 "Have a look through my "
                 <a href="https://github.com/alixmacdonald10" target="_blank" rel="noopener">"GitHub"</a>
-                " and "<A href="/">"blog posts"</A>
                 " to see more of what I'm all about."
             </p>
         </article>

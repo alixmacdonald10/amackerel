@@ -3,32 +3,46 @@ import { test, expect } from "@playwright/test";
 const BASE = "http://localhost:3000";
 
 test.describe("home page", () => {
-  test("has blog title and header", async ({ page }) => {
+  test("has projects title and header", async ({ page }) => {
     await page.goto(`${BASE}/`);
 
-    await expect(page).toHaveTitle("A Macdonald — Blog");
+    await expect(page).toHaveTitle("A Macdonald — Projects");
     await expect(
       page.locator('header a[href="/"] img[alt="A Macdonald"]'),
     ).toBeVisible();
-    await expect(page.locator("header p")).toContainText("simple");
+    await expect(page.locator("header p").first()).toContainText("simple");
   });
 
-  test("lists posts or shows empty state", async ({ page }) => {
+  test("lists projects or shows empty state", async ({ page }) => {
     await page.goto(`${BASE}/`);
 
-    await expect(page.locator(".section-title")).toHaveText("Posts");
+    await expect(page.locator(".section-title")).toHaveText("Projects");
 
-    // Branch on whether any posts ship with the repo. Check the empty state
-    // first; if it's absent, fall through to asserting the posts list.
-    const emptyState = page.locator('img[alt="No posts yet"]');
+    // Projects are fetched live from GitHub, so the page can land in three
+    // states: populated list, empty state, or a load-error notice (no network
+    // / rate limited in CI). Handle each without flaking.
+    const emptyState = page.locator('img[alt="No projects yet"]');
+    const loadError = page.getByText("Failed to load projects.");
+
     if (await emptyState.count()) {
       await expect(emptyState).toBeVisible();
       await expect(page.locator("body")).toContainText(
         "Nothing here yet, I'm still fishing for ideas.",
       );
       await expect(page.locator(".post-card")).toHaveCount(0);
+    } else if (await loadError.count()) {
+      // Projects unreachable — nothing to assert beyond the notice itself.
+      await expect(loadError).toBeVisible();
+      await expect(page.locator(".post-card")).toHaveCount(0);
     } else {
       await expect(page.locator(".post-card")).not.toHaveCount(0);
+
+      // Each card links out to its GitHub repo in a new tab.
+      const firstCard = page.locator(".post-card").first();
+      const link = firstCard.locator("a.card-link");
+      await expect(link).toHaveAttribute("target", "_blank");
+      await expect(link).toHaveAttribute("href", /^https:\/\/github\.com\//);
+      await expect(firstCard.locator("h3")).toBeVisible();
     }
   });
 
@@ -41,23 +55,6 @@ test.describe("home page", () => {
     await expect(gh).toBeVisible();
     await expect(gh).toHaveAttribute("target", "_blank");
   });
-});
-
-test("post page renders markdown", async ({ page }) => {
-  await page.goto(`${BASE}/`);
-
-  const firstPost = page.locator(".post-card a").first();
-  // No posts to open — nothing to assert here, covered by the empty-state test.
-  test.skip(
-    (await firstPost.count()) === 0,
-    "no posts available to render",
-  );
-
-  await firstPost.click();
-  await expect(page).toHaveURL(/\/posts\/.+/);
-  await expect(page.locator("article.post > h1")).toBeVisible();
-  // Frontmatter title + rendered markdown body.
-  await expect(page.locator(".post-body")).not.toBeEmpty();
 });
 
 test("about page loads via nav", async ({ page }) => {

@@ -1,6 +1,6 @@
 [package]
 name = "amackerel"
-version = "0.1.7"
+version = "0.1.8"
 edition = "2021"
 
 [package.metadata.leptos]
@@ -75,6 +75,8 @@ ssr = [
     "dep:tokio",
     "dep:leptos_axum",
     "dep:pulldown-cmark",
+    "dep:reqwest",
+    "dep:futures",
     "leptos/ssr",
     "leptos_meta/ssr",
     "leptos_router/ssr",
@@ -83,11 +85,13 @@ ssr = [
 [dependencies]
 axum = { version = "0.8", optional = true }
 console_error_panic_hook = { version = "0.1", optional = true }
+futures = { version = "0.3", optional = true }
 leptos = { version = "0.8", features = ["nightly"] }
 leptos_axum = { version = "0.8", optional = true }
 leptos_meta = { version = "0.8" }
 leptos_router = { version = "0.8", features = ["nightly"] }
 pulldown-cmark = { version = "0.12", optional = true }
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"], optional = true }
 serde = { version = "1", features = ["derive"] }
 tokio = { version = "1", features = ["rt-multi-thread"], optional = true }
 wasm-bindgen = { version = "0.2", optional = true }
