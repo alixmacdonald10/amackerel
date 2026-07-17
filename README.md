@@ -8,34 +8,6 @@ A simple developer blog built with [Leptos](https://github.com/leptos-rs/leptos)
 (SSR + hydration) on [Axum](https://github.com/tokio-rs/axum). Write posts as
 markdown files, drop them in `posts/`, and they render as pages.
 
-## Features
-
-- **Blog-first home page** (`/`) — short bio, then all posts newest-first.
-- **Markdown posts** — each `posts/*.md` file becomes a page at `/posts/<slug>`.
-- **About page** (`/about`) — separate "who I am" page, linked in the nav.
-- Rendered server-side with `pulldown-cmark`; frontmatter drives title/date/description.
-- **Security-hardened** responses (CSP, X-Frame-Options, nosniff, COEP, etc.).
-
-## Writing a post
-
-Create a file in `posts/`, e.g. `posts/my-project.md`:
-
-```md
----
-title: "My Project"
-date: "2026-07-02"
-description: "Short summary shown in the post list."
----
-
-# My Project
-
-Standard markdown below — headings, lists, code blocks, tables, quotes.
-```
-
-- The **filename** (minus `.md`) is the URL slug — this lives at `/posts/my-project`.
-- Posts are sorted **newest-first** by the `date` field.
-- `title`, `date`, `description` are optional; a missing `title` falls back to the slug.
-
 ## Project layout
 
 ```text
@@ -92,13 +64,9 @@ docker run -p 8080:8080 amackerel
 
 Open http://localhost:8080
 
-> **Note:** the server reads `posts/` at runtime relative to its working
-> directory. The image copies `posts/` in; if you mount your own, mount it at
-> `/app/posts`.
-
 ## Security headers
 
-`src/main.rs` layers hardening headers onto every response: `Content-Security-Policy`,
+Hardening headers are added onto every response: `Content-Security-Policy`,
 `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Referrer-Policy`,
 `Permissions-Policy`, and the cross-origin isolation trio (COEP/COOP/CORP).
 
@@ -354,27 +322,6 @@ Force an immediate redeploy of the latest image (bypass the 5-min poll):
 ```bash
 systemctl restart amackerel
 ```
-
-## Deploying without the toolchain
-
-After `cargo leptos build --release`, the minimum files needed are:
-
-1. The server binary in `target/release`
-2. The `target/site` directory and its contents
-3. The `posts/` directory (read at runtime)
-
-Set these environment variables as needed:
-
-```sh
-export LEPTOS_ENV="PROD"
-export LEPTOS_OUTPUT_NAME="amackerel"
-export LEPTOS_SITE_ROOT="site"
-export LEPTOS_SITE_PKG_DIR="pkg"
-export LEPTOS_SITE_ADDR="0.0.0.0:3000"
-export LEPTOS_RELOAD_PORT="3001"
-```
-
-Then run the server binary.
 
 ## License
 
