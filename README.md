@@ -4,9 +4,10 @@
 
 # amackerel
 
-A simple developer blog built with [Leptos](https://github.com/leptos-rs/leptos)
-(SSR + hydration) on [Axum](https://github.com/tokio-rs/axum). Write posts as
-markdown files, drop them in `posts/`, and they render as pages.
+A developer portfolio built with [Leptos](https://github.com/leptos-rs/leptos)
+(SSR + hydration) on [Axum](https://github.com/tokio-rs/axum). The homepage
+showcases a curated set of GitHub projects, fetched live from the GitHub API and
+cached server-side.
 
 ## Project layout
 
