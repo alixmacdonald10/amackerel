@@ -22,7 +22,7 @@ test.describe("home page", () => {
     // states: populated list, empty state, or a load-error notice (no network
     // / rate limited in CI). Handle each without flaking.
     const emptyState = page.locator('img[alt="No projects yet"]');
-    const loadError = page.getByText("Failed to load projects.");
+    const loadError = page.locator('img[alt="Failed to load projects"]');
 
     if (await emptyState.count()) {
       await expect(emptyState).toBeVisible();
@@ -31,8 +31,11 @@ test.describe("home page", () => {
       );
       await expect(page.locator(".post-card")).toHaveCount(0);
     } else if (await loadError.count()) {
-      // Projects unreachable — nothing to assert beyond the notice itself.
+      // Projects unreachable — show the error image + notice.
       await expect(loadError).toBeVisible();
+      await expect(page.locator("body")).toContainText(
+        "Couldn't reel in the projects — try again later.",
+      );
       await expect(page.locator(".post-card")).toHaveCount(0);
     } else {
       await expect(page.locator(".post-card")).not.toHaveCount(0);
