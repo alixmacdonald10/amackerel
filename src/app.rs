@@ -156,7 +156,18 @@ fn HomePage() -> impl IntoView {
                         }).collect_view()}
                     </ul>
                 }.into_any(),
-                Err(_) => view! { <p class="notice">"Failed to load projects."</p> }.into_any(),
+                Err(_) => view! {
+                    <section class="flex flex-col items-center text-center gap-4 py-12">
+                        <img
+                            src="/404.png"
+                            alt="Failed to load projects"
+                            class="w-full max-w-[420px]"
+                        />
+                        <p class="text-lg text-[var(--muted)] m-0">
+                            "Couldn't reel in the projects — try again later."
+                        </p>
+                    </section>
+                }.into_any(),
             })}
         </Suspense>
     }
