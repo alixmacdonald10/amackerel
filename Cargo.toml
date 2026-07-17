@@ -65,6 +65,9 @@ lib-default-features = false
 # Optional. Defaults to "release".
 lib-profile-release = "wasm-release"
 
+# Use cargo-leptos content hashing so every build emits unique amackerel.<hash>.{js,wasm,css} filenames
+hash-files = true
+
 [lib]
 crate-type = ["cdylib", "rlib"]
 
