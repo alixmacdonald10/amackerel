@@ -236,6 +236,14 @@ main {
 	margin-bottom: 1.75rem !important;
 }
 
+.about-stack {
+	font-family: "SF Mono", Menlo, Consolas, monospace;
+	font-size: 0.85rem !important;
+	color: var(--muted);
+	letter-spacing: 0.02em;
+	margin-bottom: 2rem !important;
+}
+
 .hl {
 	background: linear-gradient(transparent 60%, rgba(37, 99, 235, 0.18) 60%);
 	color: var(--accent);

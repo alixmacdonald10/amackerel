@@ -6,37 +6,25 @@ async fn about() -> Result {
         <article class="post about">
             <h1 class="text-4xl font-bold mb-4">"I'm Alix"</h1>
 
+            <p class="about-stack">
+                "Rust - Python - Kubernetes - Postgres"
+            </p>
+
             <p class="about-lead">
-                "A "
-                <span class="hl">"senior software engineer"</span>
-                " specialising in backend and "
-                "infrastructure, and an ex-Chartered Mechanical Engineer who decided to cast his net a little wider."
+                <span class="hl">"Senior software engineer"</span>
+                " specialising in backend and infrastructure. "
+                "Ex-Chartered Mechanical Engineer who decided to cast the net a little wider."
             </p>
 
-            <p>
-                "Throughout my career I've picked up two Master's degrees, one in "
-                <span class="hl">"Mechanical Engineering"</span>
-                " and the other in "
-                <span class="hl">"Astronautics & Space Engineering"</span>
-                " (pretty cool I know)."
-            </p>
+
 
             <p>
-                "I have one guiding principle... "
-                <span class="hl">"Keep It Simple Stupid (KISS)"</span>
-                "."
-            </p>
-
-            <p>
-                "As Developers we love making things harder than they are. So I spend "
-                "my time reasoning about problems, hunting complexity down and removing it."
-            </p>
-
-            <p>
-                "I'm big on "
-                <span class="hl">"security"</span>
-                ". Simple systems are easier to "
-                "reason about, and things you can reason about are things you can actually secure. "
+                "My guiding principle is "
+                <span class="hl">"KISS"</span>
+                "- Keep It Simple, Stupid. As developers we love making things harder "
+                "than they need to be. I spend my time hunting down complexity and "
+                "removing it. Simple systems are easier to reason about and the things "
+                "you can reason about are the things you can actually work with."
             </p>
 
             <p>
@@ -56,6 +44,15 @@ async fn about() -> Result {
                 "good with "
                 <span class="hl">"Python"</span>
                 " too, I just miss Rust's compiler."
+            </p>
+
+            <p>
+                "Before all this I picked up two Master's degrees, one in "
+                <span class="hl">"Mechanical Engineering"</span>
+                ", the other in "
+                <span class="hl">"Astronautics & Space Engineering"</span>
+                ". I had a solid career here, hence the \"ex-Chartered Mechanical Engineer\", "
+                "but i was reeled in by the infinite scope of software engineering, and havn't looked back!"
             </p>
 
             <p>
