@@ -95,7 +95,7 @@ async fn fetch_repo(client: &reqwest::Client, slug: &str) -> Option<ProjectMeta>
     {
         if let Ok(map) = resp.json::<std::collections::HashMap<String, u64>>().await {
             let mut pairs: Vec<(String, u64)> = map.into_iter().collect();
-            pairs.sort_by(|a, b| b.1.cmp(&a.1));
+            pairs.sort_by_key(|b| std::cmp::Reverse(b.1));
             languages = pairs.into_iter().map(|(name, _)| name).collect();
         }
     }
