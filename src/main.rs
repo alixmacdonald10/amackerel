@@ -1,85 +1,91 @@
-#[cfg(feature = "ssr")]
+mod app;
+mod projects;
+
+use topcoat::{
+    asset::{AssetBundle, RouterBuilderAssetExt},
+    context::CxBuilder,
+    router::{
+        layer, Body, HeaderName, HeaderValue, Next, Response, Router, RouterBuilderDiscoverExt,
+    },
+    Result,
+};
+
 #[tokio::main]
 async fn main() {
-    use amackerel::app::*;
-    use axum::{middleware, Router};
-    use leptos::logging::log;
-    use leptos::prelude::*;
-    use leptos_axum::{generate_route_list, LeptosRoutes};
+    let router = Router::builder()
+        .discover()
+        .assets(AssetBundle::load().unwrap())
+        .build();
 
-    let conf = get_configuration(None).unwrap();
-    let addr = conf.leptos_options.site_addr;
-    let leptos_options = conf.leptos_options;
-    // Generate the list of routes in your Leptos App
-    let routes = generate_route_list(App);
+    topcoat::start(router).await.unwrap();
+}
 
-    let app = Router::new()
-        .leptos_routes(&leptos_options, routes, {
-            let leptos_options = leptos_options.clone();
-            move || shell(leptos_options.clone())
-        })
-        .fallback(leptos_axum::file_and_error_handler(shell))
-        // Add hardening headers to every response.
-        .layer(middleware::from_fn(security_headers))
-        .with_state(leptos_options);
-
-    // run our app with hyper
-    log!("listening on http://{}", &addr);
-    let listener = tokio::net::TcpListener::bind(&addr).await.unwrap();
-    axum::serve(listener, app.into_make_service())
-        .await
-        .unwrap();
+/// True when running under `topcoat dev`, which serves its live-reload client
+/// script from a second origin.
+fn dev_origin() -> Option<String> {
+    std::env::var("TOPCOAT_DEV_URL").ok()
 }
 
 /// Sets security-hardening headers on every response.
-#[cfg(feature = "ssr")]
-async fn security_headers(
-    request: axum::extract::Request,
-    next: axum::middleware::Next,
-) -> axum::response::Response {
-    use axum::http::header::{HeaderName, HeaderValue};
-
-    let mut response = next.run(request).await;
+///
+/// Two headers are relaxed only under `topcoat dev`, because the live-reload
+/// script and its websocket live on the dev server's origin, not ours:
+/// `Content-Security-Policy` gains that origin, and
+/// `Cross-Origin-Embedder-Policy` is dropped (require-corp would block the
+/// cross-origin script). Production responses are unaffected.
+#[layer("/")]
+async fn security_headers(cx: &mut CxBuilder, body: Body, next: Next<'_>) -> Result<Response> {
+    let mut response = next.run(cx, body).await?;
     let headers = response.headers_mut();
 
-    let set = |headers: &mut axum::http::HeaderMap, name: &'static str, value: &'static str| {
-        headers.insert(
-            HeaderName::from_static(name),
-            HeaderValue::from_static(value),
-        );
+    let mut set = |name: &'static str, value: String| {
+        if let Ok(value) = HeaderValue::from_str(&value) {
+            headers.insert(HeaderName::from_static(name), value);
+        }
     };
 
-    set(headers, "x-frame-options", "DENY");
-    set(headers, "x-content-type-options", "nosniff");
-    set(headers, "referrer-policy", "no-referrer");
+    set("x-frame-options", "DENY".to_owned());
+    set("x-content-type-options", "nosniff".to_owned());
+    set("referrer-policy", "no-referrer".to_owned());
     set(
-        headers,
-        "content-security-policy",
+        "permissions-policy",
+        "geolocation=(), microphone=(), camera=()".to_owned(),
+    );
+    set("cross-origin-opener-policy", "same-origin".to_owned());
+    set("cross-origin-resource-policy", "same-origin".to_owned());
+
+    match dev_origin() {
+        None => {
+            set("cross-origin-embedder-policy", "require-corp".to_owned());
+            set("content-security-policy", csp("", ""));
+        }
+        Some(origin) => {
+            let ws = origin
+                .replacen("https://", "wss://", 1)
+                .replacen("http://", "ws://", 1);
+            set(
+                "content-security-policy",
+                csp(&format!(" {origin}"), &format!(" {origin} {ws}")),
+            );
+        }
+    }
+
+    Ok(response)
+}
+
+/// The CSP, with optional extra `script-src` / `connect-src` origins for dev.
+///
+/// Server-rendered pages ship no inline script or style at all.
+fn csp(extra_script_src: &str, extra_connect_src: &str) -> String {
+    format!(
         "default-src 'self'; \
-         script-src 'self' 'wasm-unsafe-eval' 'unsafe-inline'; \
-         style-src 'self' 'unsafe-inline'; \
+         script-src 'self'{extra_script_src}; \
+         style-src 'self'; \
          img-src 'self' data:; \
-         connect-src 'self'; \
+         connect-src 'self'{extra_connect_src}; \
          object-src 'none'; \
          base-uri 'self'; \
          form-action 'self'; \
-         frame-ancestors 'none'",
-    );
-    set(
-        headers,
-        "permissions-policy",
-        "geolocation=(), microphone=(), camera=()",
-    );
-    set(headers, "cross-origin-embedder-policy", "require-corp");
-    set(headers, "cross-origin-opener-policy", "same-origin");
-    set(headers, "cross-origin-resource-policy", "same-origin");
-
-    response
-}
-
-#[cfg(not(feature = "ssr"))]
-pub fn main() {
-    // no client-side main function
-    // unless we want this to work with e.g., Trunk for pure client-side testing
-    // see lib.rs for hydration function instead
+         frame-ancestors 'none'"
+    )
 }
