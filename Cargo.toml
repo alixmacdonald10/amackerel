@@ -12,3 +12,15 @@ topcoat = { version = "0.5", features = ["tailwind"] }
 
 [build-dependencies]
 topcoat = { version = "0.5", default-features = false, features = ["tailwind"] }
+
+[profile.dev]
+debug = "line-tables-only"
+
+[profile.dev.package."*"]
+debug = false
+
+[profile.release]
+codegen-units = 1
+strip = "debuginfo"
+lto = "fat"
+opt-level = 3
