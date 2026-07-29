@@ -4,22 +4,28 @@
 
 # amackerel
 
-A developer portfolio built with [Leptos](https://github.com/leptos-rs/leptos)
-(SSR + hydration) on [Axum](https://github.com/tokio-rs/axum). The homepage
-showcases a curated set of GitHub projects, fetched live from the GitHub API and
-cached server-side.
+A developer portfolio built with [topcoat](https://github.com/tokio-rs/topcoat) —
+server-rendered Rust, **no WebAssembly and no client-side JavaScript**. The
+homepage showcases a curated set of GitHub projects, fetched live from the GitHub
+API and cached server-side.
+
+Pages are `async fn`s annotated with `#[page]`; they `.await` the data they need
+directly, because rendering happens on the server that owns the cache. There is
+no API layer, no server function and no hydration step.
 
 ## Project layout
 
 ```text
-posts/               markdown blog posts (read at runtime by the server)
-src/app.rs           routes, nav, and page components (edit bio + About here)
-src/blog.rs          post types, markdown rendering, list_posts/get_post server fns
-src/main.rs          Axum server + security-headers middleware
-style/main.scss      site styling
-public/              static assets (favicon, etc.)
+src/app/mod.rs       #[layout("/")]: document shell, nav, footer, branded 404, shared assets
+src/app/home.rs      #[page("/")]: bio + project cards
+src/app/about.rs     #[page("/about")]
+src/projects.rs      GitHub fetch + 15-minute TTL cache
+src/main.rs          entrypoint + security-headers #[layer]
+build.rs             compiles style/tailwind.css via the standalone Tailwind CLI
+style/tailwind.css   Tailwind v4 input + hand-written component classes
+public/              images, declared in Rust with asset!
 end2end/             Playwright end-to-end tests
-Dockerfile           two-stage Alpine build (nightly builder → tiny runtime)
+Dockerfile           two-stage Alpine build (stable builder → tiny runtime)
 .github/workflows/   CI/CD pipeline
 infrastructure/      OpenTofu/Terraform: DO droplet + Cloudflare tunnel + cloud-init startup
 ```
@@ -27,36 +33,54 @@ infrastructure/      OpenTofu/Terraform: DO droplet + Cloudflare tunnel + cloud-
 ## Running
 
 ```bash
-cargo leptos watch
+topcoat dev
 ```
 
-Open http://127.0.0.1:3000
+Open http://127.0.0.1:3000. Press `r` to force a rebuild; the page live-reloads
+on every successful build.
 
 ## Prerequisites
 
-`cargo-leptos` uses nightly Rust and dart-sass. If something is missing:
+Stable Rust (pinned in `rust-toolchain.toml`) and the topcoat CLI. No nightly, no
+`wasm32` target, no npm, no dart-sass — `build.rs` downloads and caches the
+standalone Tailwind CLI itself.
 
-1. `cargo install cargo-leptos --locked`
-2. `rustup toolchain install nightly --allow-downgrade`
-3. `rustup target add wasm32-unknown-unknown` (also declared in `rust-toolchain.toml`)
-4. `npm install -g sass`
-5. `npm install` in the `end2end` directory before running tests
+1. `cargo install topcoat-cli --locked`
+2. `npm install` in the `end2end` directory before running tests
 
 ## Testing
 
 ```bash
 # Unit tests
-cargo test --features ssr --no-default-features
+cargo test
 
-# End-to-end (builds app, serves on :3000, runs Playwright)
-cargo leptos end-to-end
+# End-to-end: start the app, then run Playwright against it
+topcoat dev                          # in one shell
+cd end2end && npx playwright test    # in another
 ```
 
-Playwright specs live in `end2end/tests`.
+Playwright specs live in `end2end/tests` and assert rendered DOM only.
+
+## Building without the dev server
+
+Asset URLs are content-hashed, and the mapping is embedded per build, so the
+bundle and the binary must come from the **same** profile — otherwise the app
+panics with `failed to resolve asset ... in the asset catalog`.
+
+```bash
+cargo build --release
+topcoat asset bundle --release        # writes target/assets
+./target/release/amackerel            # HOST/PORT default to 127.0.0.1:3000
+```
 
 ## Docker
 
-Two-stage build: Alpine + Rust nightly builder → bare Alpine runtime (~20 MB).
+Two-stage build: Alpine + stable Rust builder → bare Alpine runtime.
+
+The builder installs the **musl** Tailwind CLI and points `build.rs` at it via
+`TAILWIND_CLI`, because topcoat only ever downloads the glibc build, which cannot
+run on Alpine. The runtime stage holds just the binary and `assets/` next to it —
+`AssetBundle::load()` walks up from the executable to find `assets/manifest.toml`.
 
 ```bash
 docker build -t amackerel .
@@ -71,9 +95,16 @@ Hardening headers are added onto every response: `Content-Security-Policy`,
 `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Referrer-Policy`,
 `Permissions-Policy`, and the cross-origin isolation trio (COEP/COOP/CORP).
 
-The CSP allows `'wasm-unsafe-eval'` and `'unsafe-inline'` scripts — both required
-for Leptos hydration. Don't remove them without switching to a nonce-based CSP,
-or hydration breaks.
+The CSP is strict: `script-src 'self'` and `style-src 'self'`, with no
+`'unsafe-inline'` and no `'wasm-unsafe-eval'`. Those relaxations existed only for
+Leptos hydration; server-rendered pages ship no inline script or style, and no
+JavaScript at all.
+
+Under `topcoat dev` two headers are relaxed, because the live-reload client is
+served from the dev server's own origin: that origin is added to `script-src` /
+`connect-src`, and `Cross-Origin-Embedder-Policy` is dropped (`require-corp`
+would block the cross-origin script). Production responses are unaffected —
+see `security_headers` in `src/main.rs`.
 
 ## CI/CD
 

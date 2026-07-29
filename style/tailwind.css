@@ -221,6 +221,12 @@ main {
 
 }
 
+/* Navigation is now a real document load (no client-side router), so the
+   transition has to be opted into for cross-document navigations. */
+@view-transition {
+	navigation: auto;
+}
+
 /* Page transition: old slides left off-screen, new enters from the right. */
 @keyframes page-slide-out {
 	to { transform: translateX(-100vw); }
