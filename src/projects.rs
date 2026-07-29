@@ -1,7 +1,8 @@
-use serde::Deserialize;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
+
+use serde::Deserialize;
 
 /// Metadata for a single GitHub project, shown as a card on the homepage.
 #[derive(Clone, Debug)]
@@ -138,8 +139,9 @@ async fn fetch_repo(client: &reqwest::Client, slug: &str) -> Option<ProjectMeta>
     })
 }
 
-/// Fetches every curated repo concurrently; `join_all` preserves `CURATED`
-/// order, which is the display order on the homepage.
+/// Fetches every curated repo concurrently;
+///
+/// `join_all` preserves `CURATED` order, which is the display order on the homepage.
 async fn fetch_all() -> Vec<ProjectMeta> {
     let client = client();
     let results =
@@ -154,7 +156,9 @@ fn cached() -> Option<(Instant, Vec<ProjectMeta>)> {
 }
 
 /// Caches `projects` only if the fetch was complete, and reports whether it
-/// was. A single failed repo (rate limit, transient 404, network) must not
+/// was.
+///
+/// A single failed repo (rate limit, transient 404, network) must not
 /// poison the cache with a short list for the next TTL.
 fn store_if_complete(projects: &[ProjectMeta]) -> bool {
     if projects.len() < CURATED.len() {
@@ -170,6 +174,7 @@ fn store_if_complete(projects: &[ProjectMeta]) -> bool {
 /// is what keeps a page render from ever waiting on GitHub.
 pub fn spawn_refresh() {
     if REFRESHING.swap(true, Ordering::SeqCst) {
+        // this was already refreshing
         return;
     }
     tokio::spawn(async {
@@ -178,10 +183,10 @@ pub fn spawn_refresh() {
     });
 }
 
-/// Returns the curated project list, stale-while-revalidate: any cached list is
-/// served immediately and an expired one is refreshed in the background, so
-/// only a cold start ever waits on GitHub. `Unavailable` means there is nothing
-/// at all to show.
+/// Returns the curated project list, stale-while-revalidate
+///
+/// Any cached list is served immediately and an expired one is refreshed in the background, so
+/// only a cold start ever waits on GitHub. `Unavailable` means there is nothing at all to show.
 pub async fn load_projects() -> Result<Vec<ProjectMeta>, Unavailable> {
     if let Some((fetched_at, list)) = cached() {
         if fetched_at.elapsed() >= CACHE_TTL {

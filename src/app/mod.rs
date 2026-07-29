@@ -19,8 +19,9 @@ pub const LOGO: Asset = asset!("public/favicon-light.png");
 pub const NOT_FOUND_IMG: Asset = asset!("public/404.png");
 pub const NO_PROJECTS_IMG: Asset = asset!("public/no-posts.png");
 
-/// Wraps every page: document shell, nav, footer, and the branded 404 that a
-/// page's `NotFoundError` renders into.
+/// Wraps every page
+///
+/// Document shell, nav, footer, and the branded 404 that a page's `NotFoundError` renders into.
 #[layout("/")]
 async fn root_layout(cx: &Cx, slot: Result) -> Result {
     // A layout sees the inner page's error before it becomes a response, so
@@ -86,6 +87,7 @@ async fn root_layout(cx: &Cx, slot: Result) -> Result {
 }
 
 /// Catches every unmatched path so the branded 404 renders inside the layout.
+///
 /// The router's own not-found response bypasses layouts entirely, so a page has
 /// to raise the error for `root_layout` to catch it.
 #[page("/{*path}")]
@@ -93,8 +95,6 @@ async fn unmatched() -> Result {
     Err(not_found().into())
 }
 
-/// Leptos set the document title per route via `<Title>`; here the shell owns
-/// `<head>`, so it derives the title from the request path instead.
 fn title_for(path: &str) -> &'static str {
     match path {
         "/" => "A Macdonald — Projects",
