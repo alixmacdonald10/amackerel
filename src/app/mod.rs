@@ -68,10 +68,10 @@ async fn root_layout(cx: &Cx, slot: Result) -> Result {
                     <p class="text-xs text-[var(--muted)] m-0 italic">
                         "Beware of fish related puns"
                     </p>
-                    <nav class="flex gap-6 text-[0.95rem] [&_a]:text-[var(--muted)] [&_a]:no-underline [&_a:hover]:text-[var(--fg)]">
-                        <a href="/">"Projects"</a>
-                        <a href="/about">"About"</a>
-                        <a href="https://github.com/alixmacdonald10" target="_blank" rel="noopener">"GitHub"</a>
+                    <nav class="site-nav flex gap-6 text-[0.95rem]">
+                        <a href="/"><span>"Projects"</span></a>
+                        <a href="/about"><span>"About"</span></a>
+                        <a href="https://github.com/alixmacdonald10" target="_blank" rel="noopener"><span>"GitHub"</span></a>
                     </nav>
                 </header>
                 <main>(content)</main>
