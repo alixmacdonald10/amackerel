@@ -17,6 +17,10 @@ async fn main() {
         .assets(AssetBundle::load().unwrap())
         .build();
 
+    // Warm the project cache before the first request arrives, so the cold-start
+    // GitHub fetch isn't paid by a visitor.
+    projects::spawn_refresh();
+
     topcoat::start(router).await.unwrap();
 }
 

@@ -1,4 +1,5 @@
 use serde::Deserialize;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
@@ -25,11 +26,33 @@ const CURATED: &[&str] = &[
     "alixmacdonald10/checkerel",
 ];
 
-/// How long a fetched list stays fresh before we hit GitHub again.
+/// How long a fetched list stays fresh before we refresh it in the background.
 /// Keeps us well under the 60 req/hr unauthenticated rate limit.
 const CACHE_TTL: Duration = Duration::from_secs(15 * 60);
 
-static CACHE: OnceLock<Mutex<Option<(Instant, Vec<ProjectMeta>)>>> = OnceLock::new();
+/// The cached list with the instant it was fetched; `None` until the first
+/// complete fetch lands.
+type CacheSlot = Mutex<Option<(Instant, Vec<ProjectMeta>)>>;
+
+static CACHE: OnceLock<CacheSlot> = OnceLock::new();
+
+fn cache() -> &'static CacheSlot {
+    CACHE.get_or_init(|| Mutex::new(None))
+}
+
+/// True while a background refresh is in flight, so a burst of requests past
+/// the TTL fires one refresh rather than one per request.
+static REFRESHING: AtomicBool = AtomicBool::new(false);
+
+/// Clears `REFRESHING` on drop, so a panicking refresh task can't wedge
+/// refreshes off for the rest of the process's life.
+struct RefreshGuard;
+
+impl Drop for RefreshGuard {
+    fn drop(&mut self) {
+        REFRESHING.store(false, Ordering::SeqCst);
+    }
+}
 
 /// Shared client, built once. Reused connection pool, and a request timeout
 /// so a hung GitHub socket can't wedge the request indefinitely.
@@ -115,48 +138,71 @@ async fn fetch_repo(client: &reqwest::Client, slug: &str) -> Option<ProjectMeta>
     })
 }
 
-/// Returns the curated project list, served from cache when fresh. On a
-/// total fetch failure, falls back to a stale cache if present, and only
-/// reports `Unavailable` when there is nothing at all to show.
-pub async fn load_projects() -> Result<Vec<ProjectMeta>, Unavailable> {
-    let cache = CACHE.get_or_init(|| Mutex::new(None));
-
-    // Serve fresh cache.
-    if let Ok(guard) = cache.lock() {
-        if let Some((fetched_at, list)) = guard.as_ref() {
-            if fetched_at.elapsed() < CACHE_TTL {
-                return Ok(list.clone());
-            }
-        }
-    }
-
-    // Fetch every repo concurrently; join_all preserves CURATED order,
-    // which is the display order on the homepage.
+/// Fetches every curated repo concurrently; `join_all` preserves `CURATED`
+/// order, which is the display order on the homepage.
+async fn fetch_all() -> Vec<ProjectMeta> {
     let client = client();
     let results =
         futures::future::join_all(CURATED.iter().map(|slug| fetch_repo(client, slug))).await;
-    let projects: Vec<ProjectMeta> = results.into_iter().flatten().collect();
+    results.into_iter().flatten().collect()
+}
 
-    // Only trust — and cache — a complete fetch. A single failed repo (rate
-    // limit, transient 404, network) must not poison the fresh cache with a
-    // short list for the next TTL. Serve stale cache if we have it, else the
-    // partial list (better than nothing on a cold start).
+/// A clone of whatever is cached, fresh or stale, with the time it was fetched.
+fn cached() -> Option<(Instant, Vec<ProjectMeta>)> {
+    let guard = cache().lock().ok()?;
+    (*guard).clone()
+}
+
+/// Caches `projects` only if the fetch was complete, and reports whether it
+/// was. A single failed repo (rate limit, transient 404, network) must not
+/// poison the cache with a short list for the next TTL.
+fn store_if_complete(projects: &[ProjectMeta]) -> bool {
     if projects.len() < CURATED.len() {
-        if let Ok(guard) = cache.lock() {
-            if let Some((_, list)) = guard.as_ref() {
-                return Ok(list.clone());
-            }
+        return false;
+    }
+    if let Ok(mut guard) = cache().lock() {
+        *guard = Some((Instant::now(), projects.to_vec()));
+    }
+    true
+}
+
+/// Refreshes the cache off the request path. Serving stale data while this runs
+/// is what keeps a page render from ever waiting on GitHub.
+pub fn spawn_refresh() {
+    if REFRESHING.swap(true, Ordering::SeqCst) {
+        return;
+    }
+    tokio::spawn(async {
+        let _guard = RefreshGuard;
+        store_if_complete(&fetch_all().await);
+    });
+}
+
+/// Returns the curated project list, stale-while-revalidate: any cached list is
+/// served immediately and an expired one is refreshed in the background, so
+/// only a cold start ever waits on GitHub. `Unavailable` means there is nothing
+/// at all to show.
+pub async fn load_projects() -> Result<Vec<ProjectMeta>, Unavailable> {
+    if let Some((fetched_at, list)) = cached() {
+        if fetched_at.elapsed() >= CACHE_TTL {
+            spawn_refresh();
         }
-        // Nothing fetched and no cache: GitHub is unreachable. Distinct from
-        // "the curated list is empty", which is a legitimate empty state.
-        if projects.is_empty() && !CURATED.is_empty() {
-            return Err(Unavailable);
-        }
+        return Ok(list);
+    }
+
+    // Cold start: nothing to serve, so this request has to wait for the fetch.
+    let projects = fetch_all().await;
+    if store_if_complete(&projects) {
         return Ok(projects);
     }
 
-    if let Ok(mut guard) = cache.lock() {
-        *guard = Some((Instant::now(), projects.clone()));
+    // Nothing fetched and no cache: GitHub is unreachable. Distinct from
+    // "the curated list is empty", which is a legitimate empty state.
+    if projects.is_empty() && !CURATED.is_empty() {
+        return Err(Unavailable);
     }
+
+    // Partial list — better than nothing on a cold start, and left uncached so
+    // the next request retries.
     Ok(projects)
 }
