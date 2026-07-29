@@ -29,9 +29,12 @@ a:hover {
 }
 
 main {
-	max-width: 720px;
-	margin: 0 auto;
-	padding: 2rem 1.25rem 4rem;
+	/* Full-bleed so the view-transition snapshot is viewport-wide and a
+	   `translateX(100%)` slide clears the screen exactly. The reading column is
+	   rebuilt from padding: `50% - 340px` per side leaves a 680px content box,
+	   the same width the old `max-width: 720px` + `1.25rem` padding produced,
+	   so it still lines up with the header's `max-w-[720px] px-5`. */
+	padding: 2rem max(1.25rem, calc(50% - 340px)) 4rem;
 	view-transition-name: page;
 }
 
@@ -248,24 +251,41 @@ main {
 	navigation: auto;
 }
 
-/* Page transition: old slides left off-screen, new enters from the right. */
+/* Page transition: old slides left off-screen, new enters from the right.
+   Both snapshots are anchored at the same group origin, so the travel must be
+   `100%` (one snapshot width, i.e. the viewport now that `main` is full-bleed)
+   and not `100vw` — overshooting leaves the slot uncovered mid-animation, which
+   is what read as a white flash. */
 @keyframes page-slide-out {
-	to { transform: translateX(-100vw); }
+	to { transform: translateX(-100%); }
 }
 
 @keyframes page-slide-in {
-	from { transform: translateX(100vw); }
+	from { transform: translateX(100%); }
 }
 
 ::view-transition-old(page) {
-	animation: 700ms cubic-bezier(0.76, 0, 0.24, 1) both page-slide-out;
+	animation: 500ms cubic-bezier(0.76, 0, 0.24, 1) both page-slide-out;
 }
 
 ::view-transition-new(page) {
-	animation: 700ms cubic-bezier(0.76, 0, 0.24, 1) both page-slide-in;
+	animation: 500ms cubic-bezier(0.76, 0, 0.24, 1) both page-slide-in;
+}
+
+/* `main` is much taller on Projects than on About; pin the group's size and
+   position morph to the same timing so the height change lands with the slide. */
+::view-transition-group(page) {
+	animation-duration: 500ms;
+	animation-timing-function: cubic-bezier(0.76, 0, 0.24, 1);
 }
 
 @media (prefers-reduced-motion: reduce) {
+	/* Opt out of the transition entirely rather than zeroing the animations. */
+	@view-transition {
+		navigation: none;
+	}
+
+	/* Fallback for engines that ignore `@view-transition` in a media query. */
 	::view-transition-old(page),
 	::view-transition-new(page) {
 		animation: none;
