@@ -24,7 +24,7 @@ pub struct Unavailable;
 const CURATED: &[&str] = &[
     "alixmacdonald10/amackerel",
     "alixmacdonald10/chronofile",
-    "alixmacdonald10/checkerel",
+    "alixmacdonald10/tacklebox",
 ];
 
 /// How long a fetched list stays fresh before we refresh it in the background.
