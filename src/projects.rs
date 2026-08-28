@@ -4,6 +4,28 @@ use std::time::{Duration, Instant};
 
 use serde::Deserialize;
 
+/// Hand-picked repos to show off, as `owner/repo` slugs.
+/// Edit this list (and rebuild) to change which projects appear.
+const CURATED: &[&str] = &[
+    "alixmacdonald10/amackerel",
+    "alixmacdonald10/chronofile",
+    "alixmacdonald10/tacklebox",
+];
+
+/// How long a fetched list stays fresh before we refresh it in the background.
+/// Keeps us well under the 60 req/hr unauthenticated rate limit.
+const CACHE_TTL: Duration = Duration::from_secs(15 * 60);
+
+static CACHE: OnceLock<CacheSlot> = OnceLock::new();
+
+/// True while a background refresh is in flight, so a burst of requests past
+/// the TTL fires one refresh rather than one per request.
+static REFRESHING: AtomicBool = AtomicBool::new(false);
+
+/// Shared client, built once. Reused connection pool, and a request timeout
+/// so a hung GitHub socket can't wedge the request indefinitely.
+static CLIENT: OnceLock<reqwest::Client> = OnceLock::new();
+
 /// Metadata for a single GitHub project, shown as a card on the homepage.
 #[derive(Clone, Debug)]
 pub struct ProjectMeta {
@@ -19,31 +41,13 @@ pub struct ProjectMeta {
 #[derive(Debug)]
 pub struct Unavailable;
 
-/// Hand-picked repos to show off, as `owner/repo` slugs.
-/// Edit this list (and rebuild) to change which projects appear.
-const CURATED: &[&str] = &[
-    "alixmacdonald10/amackerel",
-    "alixmacdonald10/chronofile",
-    "alixmacdonald10/tacklebox",
-];
-
-/// How long a fetched list stays fresh before we refresh it in the background.
-/// Keeps us well under the 60 req/hr unauthenticated rate limit.
-const CACHE_TTL: Duration = Duration::from_secs(15 * 60);
-
 /// The cached list with the instant it was fetched; `None` until the first
 /// complete fetch lands.
 type CacheSlot = Mutex<Option<(Instant, Vec<ProjectMeta>)>>;
 
-static CACHE: OnceLock<CacheSlot> = OnceLock::new();
-
 fn cache() -> &'static CacheSlot {
     CACHE.get_or_init(|| Mutex::new(None))
 }
-
-/// True while a background refresh is in flight, so a burst of requests past
-/// the TTL fires one refresh rather than one per request.
-static REFRESHING: AtomicBool = AtomicBool::new(false);
 
 /// Clears `REFRESHING` on drop, so a panicking refresh task can't wedge
 /// refreshes off for the rest of the process's life.
@@ -54,10 +58,6 @@ impl Drop for RefreshGuard {
         REFRESHING.store(false, Ordering::SeqCst);
     }
 }
-
-/// Shared client, built once. Reused connection pool, and a request timeout
-/// so a hung GitHub socket can't wedge the request indefinitely.
-static CLIENT: OnceLock<reqwest::Client> = OnceLock::new();
 
 fn client() -> &'static reqwest::Client {
     CLIENT.get_or_init(|| {
