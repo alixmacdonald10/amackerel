@@ -1,64 +1,66 @@
 use topcoat::{router::page, view::view, Result};
 
+use crate::app::{GITHUB_URL, HIGHLIGHT_CSS, INLINE_NAV_LINK_CSS, PARAGRAPH_CSS};
+
+
 #[page("/about")]
 async fn about() -> Result {
     view! {
-        <article class="post about">
-            <h1 class="text-4xl font-bold mb-4">"I'm Alix"</h1>
+        <article class="flex flex-col text-left max-w-[720px] font-mono mb-8">
+            <h1 class="text-4xl font-bold mb-2">"I'm Alix"</h1>
 
-            <p class="about-stack">
+            <p class="mb-8 text-sm text-[var(--color-muted)]">
                 "Rust - Python - Kubernetes - Postgres"
             </p>
 
-            <p class="about-lead">
-                <span class="hl">"Senior software engineer"</span>
+            <p class="font-bold pb-4">
+                <span class=(HIGHLIGHT_CSS)>"Senior software engineer"</span>
                 " specialising in backend and infrastructure. "
                 "Ex-Chartered Mechanical Engineer who decided to cast the net a little wider."
             </p>
 
-
-
-            <p>
+            <p class=(PARAGRAPH_CSS)>
                 "My guiding principle is "
-                <span class="hl">"KISS"</span>
-                "- Keep It Simple, Stupid. As developers we love making things harder "
+                <span class=(HIGHLIGHT_CSS)>"KISS"</span>
+                " - Keep It Simple, Stupid. As developers we love making things harder "
                 "than they need to be. I spend my time hunting down complexity and "
                 "removing it. Simple systems are easier to reason about and the things "
                 "you can reason about are the things you can actually work with."
             </p>
 
-            <p>
+            <p class=(PARAGRAPH_CSS)>
                 "I love "
-                <span class="hl">"Rust"</span>
+                <span class=(HIGHLIGHT_CSS)>"Rust"</span>
                 " and have used it professionally since "
-                <span class="hl">"2023"</span>
+                <span>"2023"</span>
                 ". "
                 "I also have a soft spot for "
-                <span class="hl">"Postgres"</span>
+                <span class=(HIGHLIGHT_CSS)>"Postgres"</span>
                 " and "
-                <span class="hl">"Kubernetes"</span>
+                <span class=(HIGHLIGHT_CSS)>"Kubernetes"</span>
                 ", and I "
                 "find "
-                <span class="hl">"system design"</span>
+                <span class=(HIGHLIGHT_CSS)>"system design"</span>
                 " genuinely rewarding. I'm perfectly "
                 "good with "
-                <span class="hl">"Python"</span>
+                <span class=(HIGHLIGHT_CSS)>"Python"</span>
                 " too, I just miss Rust's compiler."
             </p>
 
-            <p>
+            <p class=(PARAGRAPH_CSS)>
                 "Before all this I picked up two Master's degrees, one in "
-                <span class="hl">"Mechanical Engineering"</span>
+                <span class=(HIGHLIGHT_CSS)>"Mechanical Engineering"</span>
                 ", the other in "
-                <span class="hl">"Astronautics & Space Engineering"</span>
+                <span class=(HIGHLIGHT_CSS)>"Astronautics & Space Engineering"</span>
                 ". I had a solid career here, hence the \"ex-Chartered Mechanical Engineer\", "
                 "but i was reeled in by the infinite scope of software engineering, and havn't looked back!"
             </p>
 
-            <p>
+            <p class=(PARAGRAPH_CSS)>
                 "Have a look through my "
                 <a
-                    href="https://github.com/alixmacdonald10"
+                    class=(INLINE_NAV_LINK_CSS)
+                    href=(GITHUB_URL)
                     target="_blank"
                     rel="noopener"
                 >

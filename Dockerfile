@@ -29,16 +29,17 @@ FROM alpine:3.21 AS runner
 
 RUN apk add --no-cache libgcc
 
-ENV RUST_LOG="info"
+# topcoat reads both: HOST defaults to 127.0.0.1 and PORT to 3000, neither of
+# which is reachable from outside the container.
 ENV HOST="0.0.0.0"
 ENV PORT="8080"
 
 WORKDIR /app
 
 COPY --from=builder /work/target/release/amackerel /app/
-# `AssetBundle::load()` walks up from the executable looking for
-# `assets/manifest.toml`, so the bundle sits next to the binary.
-COPY --from=builder /work/target/assets /app/assets
+# `AssetBundle::load()` reads `assets/manifest.toml` in the executable's own
+# directory and nowhere else, so the bundle sits next to the binary.
+COPY --from=builder /work/target/release/assets /app/assets
 
 EXPOSE 8080
 

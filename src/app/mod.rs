@@ -4,20 +4,27 @@ mod about;
 mod home;
 
 use topcoat::{
-    asset::{asset, Asset},
-    context::Cx,
-    router::{
-        error::{not_found, NotFoundError},
-        layout, page, uri, StatusCode,
-    },
-    tailwind,
-    view::view,
-    Result,
+    Result, asset::{Asset, asset}, context::Cx, router::{
+        StatusCode, error::{NotFoundError, not_found}, layout, page, request::uri,
+    }, tailwind, view::view,
 };
 
 pub const LOGO: Asset = asset!("public/favicon-light.png");
 pub const NOT_FOUND_IMG: Asset = asset!("public/404.png");
 pub const NO_PROJECTS_IMG: Asset = asset!("public/no-posts.png");
+pub const GITHUB_URL: &str = "https://github.com/alixmacdonald10";
+pub const NAV_LINK_CSS: &str = concat!(
+    "transition delay-50 duration-200 ease-in-out ",
+    "hover:text-[var(--color-accent)] hover:-translate-y-1 hover:scale-110"
+);
+pub const INLINE_NAV_LINK_CSS: &str = concat!(
+    "inline-block ",
+    "transition delay-50 duration-200 ease-in-out ",
+    "hover:text-[var(--color-accent)] hover:-translate-y-1 hover:scale-110"
+);
+pub const HIGHLIGHT_CSS: &str = concat!("font-bold ", "text-[var(--color-accent)] ");
+pub const PARAGRAPH_CSS: &str = concat!("mt-4 mb-4 ", "break-normal");
+pub const MED_IMAGE_CSS: &str = "w-full max-w-[420px]";
 
 /// Wraps every page
 ///
@@ -33,13 +40,13 @@ async fn root_layout(cx: &Cx, slot: Result) -> Result {
                 <img
                     src=(NOT_FOUND_IMG)
                     alt="404 — page not found"
-                    class="w-full max-w-[420px]"
+                    class=(MED_IMAGE_CSS)
                 >
                 <h1 class="text-3xl font-bold m-0">"404"</h1>
-                <p class="text-lg text-[var(--muted)] m-0">
+                <p class="text-lg text-[var(--color-muted)] m-0">
                     "This page swam away."
                 </p>
-                <a href="/">"Back to shore"</a>
+                <a class=(INLINE_NAV_LINK_CSS) href="/">"Back to shore"</a>
             </section>
         },
         content => content,
@@ -49,7 +56,7 @@ async fn root_layout(cx: &Cx, slot: Result) -> Result {
 
     view! {
         <!DOCTYPE html>
-        <html lang="en">
+        <html lang="en" class="bg-[var(--color-bg)]">
             <head>
                 <meta charset="utf-8">
                 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -59,25 +66,40 @@ async fn root_layout(cx: &Cx, slot: Result) -> Result {
                 topcoat::dev::script()
             </head>
             <body>
-                <header class="max-w-[720px] mx-auto px-5 py-4 flex flex-col items-center text-center gap-2 border-b border-[var(--border)]">
+                <header
+                    class="max-w-[720px] mx-auto px-5 py-4 flex flex-col items-center text-center gap-2 border-b border-[var(--color-border)] font-mono mb-8"
+                >
                     <a href="/">
                         <img src=(LOGO) alt="A Macdonald" class="w-full max-w-[320px]">
                     </a>
-                    <p class="text-sm text-[var(--muted)] m-0">
+                    <p class="text-sm text-[var(--color-muted)]">
                         "Hooked on keeping it simple"
                     </p>
-                    <p class="text-xs text-[var(--muted)] m-0 italic">
+                    <p class="text-xs text-[var(--color-muted)] italic">
                         "Beware of fish related puns"
                     </p>
-                    <nav class="site-nav flex gap-6 text-[0.95rem]">
-                        <a href="/"><span>"Projects"</span></a>
-                        <a href="/about"><span>"About"</span></a>
-                        <a href="https://github.com/alixmacdonald10" target="_blank" rel="noopener"><span>"GitHub"</span></a>
+                    <nav
+                        class="site-nav flex gap-6 text-base text-[var(--color-muted)] mt-2"
+                    >
+                        <a class=(NAV_LINK_CSS) href="/"><span>"Projects"</span></a>
+                        <a class=(NAV_LINK_CSS) href="/about"><span>"About"</span></a>
+                        <a
+                            class=(NAV_LINK_CSS)
+                            href=(GITHUB_URL)
+                            target="_blank"
+                            rel="noopener"
+                        >
+                            <span>"GitHub"</span>
+                        </a>
                     </nav>
                 </header>
-                <main>(content)</main>
+                <main class="flex flex-col items-center [view-transition-name:page]">
+                    (content)
+                </main>
                 <footer class="fixed bottom-3 right-4 z-50">
-                    <p class="text-xs font-mono tracking-tight text-[var(--muted)] opacity-60 hover:opacity-100 transition-opacity m-0">
+                    <p
+                        class="text-xs font-mono tracking-tight text-[var(--color-muted)] opacity-60 hover:opacity-100 hover:text-[var(--color-accent)] transition-opacity m-0"
+                    >
                         (version)
                     </p>
                 </footer>

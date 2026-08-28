@@ -3,11 +3,11 @@ mod projects;
 
 use topcoat::{
     asset::{AssetBundle, RouterBuilderAssetExt},
-    context::CxBuilder,
+    context::Cx,
     router::{
-        layer, Body, HeaderName, HeaderValue, Next, Response, Router, RouterBuilderDiscoverExt,
+        Body, HeaderName, HeaderValue, LayerFn, LayerFuture, Next, Path, Router,
+        RouterBuilderDiscoverExt,
     },
-    Result,
 };
 
 #[tokio::main]
@@ -15,6 +15,7 @@ async fn main() {
     let router = Router::builder()
         .discover()
         .assets(AssetBundle::load().unwrap())
+        .layer(LayerFn::new(None::<&Path>, security_headers))
         .build();
 
     // Warm the project cache before the first request arrives, so the cold-start
@@ -37,44 +38,45 @@ fn dev_origin() -> Option<String> {
 /// `Content-Security-Policy` gains that origin, and
 /// `Cross-Origin-Embedder-Policy` is dropped (require-corp would block the
 /// cross-origin script). Production responses are unaffected.
-#[layer("/")]
-async fn security_headers(cx: &mut CxBuilder, body: Body, next: Next<'_>) -> Result<Response> {
-    let mut response = next.run(cx, body).await?;
-    let headers = response.headers_mut();
+fn security_headers<'a>(cx: &'a Cx, body: Body, next: Next<'a>) -> LayerFuture<'a> {
+    Box::pin(async move {
+        let mut response = next.run(cx, body).await?;
+        let headers = response.headers_mut();
 
-    let mut set = |name: &'static str, value: String| {
-        if let Ok(value) = HeaderValue::from_str(&value) {
-            headers.insert(HeaderName::from_static(name), value);
+        let mut set = |name: &'static str, value: String| {
+            if let Ok(value) = HeaderValue::from_str(&value) {
+                headers.insert(HeaderName::from_static(name), value);
+            }
+        };
+
+        set("x-frame-options", "DENY".to_owned());
+        set("x-content-type-options", "nosniff".to_owned());
+        set("referrer-policy", "no-referrer".to_owned());
+        set(
+            "permissions-policy",
+            "geolocation=(), microphone=(), camera=()".to_owned(),
+        );
+        set("cross-origin-opener-policy", "same-origin".to_owned());
+        set("cross-origin-resource-policy", "same-origin".to_owned());
+
+        match dev_origin() {
+            None => {
+                set("cross-origin-embedder-policy", "require-corp".to_owned());
+                set("content-security-policy", csp("", ""));
+            }
+            Some(origin) => {
+                let ws = origin
+                    .replacen("https://", "wss://", 1)
+                    .replacen("http://", "ws://", 1);
+                set(
+                    "content-security-policy",
+                    csp(&format!(" {origin}"), &format!(" {origin} {ws}")),
+                );
+            }
         }
-    };
 
-    set("x-frame-options", "DENY".to_owned());
-    set("x-content-type-options", "nosniff".to_owned());
-    set("referrer-policy", "no-referrer".to_owned());
-    set(
-        "permissions-policy",
-        "geolocation=(), microphone=(), camera=()".to_owned(),
-    );
-    set("cross-origin-opener-policy", "same-origin".to_owned());
-    set("cross-origin-resource-policy", "same-origin".to_owned());
-
-    match dev_origin() {
-        None => {
-            set("cross-origin-embedder-policy", "require-corp".to_owned());
-            set("content-security-policy", csp("", ""));
-        }
-        Some(origin) => {
-            let ws = origin
-                .replacen("https://", "wss://", 1)
-                .replacen("http://", "ws://", 1);
-            set(
-                "content-security-policy",
-                csp(&format!(" {origin}"), &format!(" {origin} {ws}")),
-            );
-        }
-    }
-
-    Ok(response)
+        Ok(response)
+    })
 }
 
 /// The CSP, with optional extra `script-src` / `connect-src` origins for dev.

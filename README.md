@@ -4,7 +4,7 @@
 
 # amackerel
 
-A developer portfolio built with [topcoat](https://github.com/tokio-rs/topcoat) —
+My developer portfolio built with [topcoat](https://github.com/tokio-rs/topcoat) —
 server-rendered Rust, **no WebAssembly and no client-side JavaScript**. The
 homepage showcases a curated set of GitHub projects, fetched live from the GitHub
 API and cached server-side.
@@ -22,7 +22,7 @@ src/app/about.rs     #[page("/about")]
 src/projects.rs      GitHub fetch + 15-minute TTL cache
 src/main.rs          entrypoint + security-headers #[layer]
 build.rs             compiles style/tailwind.css via the standalone Tailwind CLI
-style/tailwind.css   Tailwind v4 input + hand-written component classes
+style/tailwind.css   Tailwind v4 input
 public/              images, declared in Rust with asset!
 end2end/             Playwright end-to-end tests
 Dockerfile           two-stage Alpine build (stable builder → tiny runtime)
@@ -80,7 +80,8 @@ Two-stage build: Alpine + stable Rust builder → bare Alpine runtime.
 The builder installs the **musl** Tailwind CLI and points `build.rs` at it via
 `TAILWIND_CLI`, because topcoat only ever downloads the glibc build, which cannot
 run on Alpine. The runtime stage holds just the binary and `assets/` next to it —
-`AssetBundle::load()` walks up from the executable to find `assets/manifest.toml`.
+`AssetBundle::load()` reads `assets/manifest.toml` from the executable's own
+directory and nowhere else.
 
 ```bash
 docker build -t amackerel .
