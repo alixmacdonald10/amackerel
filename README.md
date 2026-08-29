@@ -19,8 +19,12 @@ no API layer, no server function and no hydration step.
 src/app/mod.rs       #[layout("/")]: document shell, nav, footer, branded 404, shared assets
 src/app/home.rs      #[page("/")]: bio + project cards
 src/app/about.rs     #[page("/about")]
-src/projects.rs      GitHub fetch + 15-minute TTL cache
-src/main.rs          entrypoint + security-headers #[layer]
+src/projects.rs      curated project list, stale-while-revalidate over the cache
+src/cache.rs         type-erased TTL cache (5-minute TTL)
+src/config.rs        AppConfig, loaded from APP_-prefixed env vars
+src/middleware.rs    security-headers #[layer]
+src/utils/io/        GitHub request headers + a HeaderMap set_header helper
+src/main.rs          entrypoint: tracing, app context, router, layer
 build.rs             compiles style/tailwind.css via the standalone Tailwind CLI
 style/tailwind.css   Tailwind v4 input
 public/              images, declared in Rust with asset!
@@ -38,6 +42,20 @@ topcoat dev
 
 Open http://127.0.0.1:3000. Press `r` to force a rebuild; the page live-reloads
 on every successful build.
+
+## Configuration
+
+Config is read from the environment at startup (`src/config.rs`), using the `APP_`
+prefix. Everything is optional — the app boots with none of it set.
+
+| Variable | Effect |
+|----------|--------|
+| `APP_GITHUB_TOKEN` | Sent as `Authorization: Bearer` on GitHub API calls. Unset, requests are unauthenticated and share the 60-req/hour per-IP rate limit; a token raises that to 5000/hour. Only needs public-repo read scope. |
+| `RUST_LOG` | `tracing-subscriber` env filter, e.g. `RUST_LOG=amackerel=debug`. Unset, nothing is logged. |
+| `HOST` / `PORT` | Bind address for the built binary; default `127.0.0.1:3000`. |
+
+The prefix matters: a bare `GITHUB_TOKEN` in your shell is ignored, so an unrelated
+token already in the environment can't leak into the app's requests.
 
 ## Prerequisites
 
@@ -105,7 +123,7 @@ Under `topcoat dev` two headers are relaxed, because the live-reload client is
 served from the dev server's own origin: that origin is added to `script-src` /
 `connect-src`, and `Cross-Origin-Embedder-Policy` is dropped (`require-corp`
 would block the cross-origin script). Production responses are unaffected —
-see `security_headers` in `src/main.rs`.
+see `security_headers` in `src/middleware.rs`.
 
 ## CI/CD
 

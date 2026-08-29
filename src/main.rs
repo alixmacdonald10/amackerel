@@ -1,97 +1,40 @@
 mod app;
+mod cache;
+mod config;
+mod middleware;
 mod projects;
+mod utils;
+
+use std::sync::Arc;
 
 use topcoat::{
     asset::{AssetBundle, RouterBuilderAssetExt},
-    context::Cx,
-    router::{
-        Body, HeaderName, HeaderValue, LayerFn, LayerFuture, Next, Path, Router,
-        RouterBuilderDiscoverExt,
-    },
+    router::{LayerFn, Path, Router, RouterBuilderDiscoverExt},
 };
+use tracing_subscriber::EnvFilter;
+
+use crate::{cache::TTLCache, config::AppConfig, middleware::security_headers};
 
 #[tokio::main]
-async fn main() {
+async fn main() -> anyhow::Result<()> {
+    tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .init();
+
+    let http_client = reqwest::Client::new();
+    let app_config = AppConfig::load()?;
+    tracing::debug!("{app_config:#?}");
+    let ttl_cache = TTLCache::new();
+
     let router = Router::builder()
         .discover()
+        .app_context(http_client)
+        .app_context(app_config)
+        .app_context(Arc::new(ttl_cache))
         .assets(AssetBundle::load().unwrap())
         .layer(LayerFn::new(None::<&Path>, security_headers))
         .build();
 
-    // Warm the project cache before the first request arrives, so the cold-start
-    // GitHub fetch isn't paid by a visitor.
-    projects::spawn_refresh();
-
-    topcoat::start(router).await.unwrap();
-}
-
-/// True when running under `topcoat dev`, which serves its live-reload client
-/// script from a second origin.
-fn dev_origin() -> Option<String> {
-    std::env::var("TOPCOAT_DEV_URL").ok()
-}
-
-/// Sets security-hardening headers on every response.
-///
-/// Two headers are relaxed only under `topcoat dev`, because the live-reload
-/// script and its websocket live on the dev server's origin, not ours:
-/// `Content-Security-Policy` gains that origin, and
-/// `Cross-Origin-Embedder-Policy` is dropped (require-corp would block the
-/// cross-origin script). Production responses are unaffected.
-fn security_headers<'a>(cx: &'a Cx, body: Body, next: Next<'a>) -> LayerFuture<'a> {
-    Box::pin(async move {
-        let mut response = next.run(cx, body).await?;
-        let headers = response.headers_mut();
-
-        let mut set = |name: &'static str, value: String| {
-            if let Ok(value) = HeaderValue::from_str(&value) {
-                headers.insert(HeaderName::from_static(name), value);
-            }
-        };
-
-        set("x-frame-options", "DENY".to_owned());
-        set("x-content-type-options", "nosniff".to_owned());
-        set("referrer-policy", "no-referrer".to_owned());
-        set(
-            "permissions-policy",
-            "geolocation=(), microphone=(), camera=()".to_owned(),
-        );
-        set("cross-origin-opener-policy", "same-origin".to_owned());
-        set("cross-origin-resource-policy", "same-origin".to_owned());
-
-        match dev_origin() {
-            None => {
-                set("cross-origin-embedder-policy", "require-corp".to_owned());
-                set("content-security-policy", csp("", ""));
-            }
-            Some(origin) => {
-                let ws = origin
-                    .replacen("https://", "wss://", 1)
-                    .replacen("http://", "ws://", 1);
-                set(
-                    "content-security-policy",
-                    csp(&format!(" {origin}"), &format!(" {origin} {ws}")),
-                );
-            }
-        }
-
-        Ok(response)
-    })
-}
-
-/// The CSP, with optional extra `script-src` / `connect-src` origins for dev.
-///
-/// Server-rendered pages ship no inline script or style at all.
-fn csp(extra_script_src: &str, extra_connect_src: &str) -> String {
-    format!(
-        "default-src 'self'; \
-         script-src 'self'{extra_script_src}; \
-         style-src 'self'; \
-         img-src 'self' data:; \
-         connect-src 'self'{extra_connect_src}; \
-         object-src 'none'; \
-         base-uri 'self'; \
-         form-action 'self'; \
-         frame-ancestors 'none'"
-    )
+    topcoat::start(router).await?;
+    Ok(())
 }
