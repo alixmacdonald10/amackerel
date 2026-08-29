@@ -4,9 +4,17 @@ mod about;
 mod home;
 
 use topcoat::{
-    Result, asset::{Asset, asset}, context::Cx, router::{
-        StatusCode, error::{NotFoundError, not_found}, layout, page, request::uri,
-    }, tailwind, view::view,
+    asset::{asset, Asset},
+    context::Cx,
+    router::{
+        error::{not_found, NotFoundError},
+        layout, page,
+        request::uri,
+        StatusCode,
+    },
+    tailwind,
+    view::view,
+    Result,
 };
 
 pub const LOGO: Asset = asset!("public/favicon-light.png");

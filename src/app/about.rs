@@ -2,7 +2,6 @@ use topcoat::{router::page, view::view, Result};
 
 use crate::app::{GITHUB_URL, HIGHLIGHT_CSS, INLINE_NAV_LINK_CSS, PARAGRAPH_CSS};
 
-
 #[page("/about")]
 async fn about() -> Result {
     view! {
