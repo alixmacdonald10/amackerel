@@ -74,7 +74,7 @@ async fn root_layout(cx: &Cx, slot: Result) -> Result {
                 <title>(title_for(uri(cx).path()))</title>
                 <link rel="icon" type="image/png" href=(LOGO)>
                 topcoat::dev::script()
-                topcoat::font::link(font: fontsource_font!(GEIST))
+                topcoat::font::link(font: fontsource_font!(GEIST_MONO))
                 <link rel="stylesheet" href=(tailwind::stylesheet!())>
             </head>
             <body class=(class!(MAX_WIDTH, "w-full", "mx-auto", "flex", "flex-col", "items-center", "text-center"))>

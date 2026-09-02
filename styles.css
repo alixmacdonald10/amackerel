@@ -36,7 +36,7 @@
    `border-border`, ...). The indirection through plain variables on `:root`
    and `.dark` is what lets the values swap when the color scheme changes. */
 @theme inline {
-  --font-sans: "Geist", sans-serif;
+  --font-mono: "Geist mono", mono;
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-muted-foreground: var(--muted-foreground);
@@ -92,6 +92,6 @@
 
 @layer base {
   body {
-    @apply bg-background font-sans text-foreground;
+    @apply bg-background font-mono text-foreground;
   }
 }
