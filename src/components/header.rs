@@ -28,7 +28,7 @@ pub async fn header() -> Result {
                 "Beware of fish related puns"
             </p>
             <nav
-                class=(class!("flex", "justify-center", "items-center", "gap-4", "text-base", "text-muted-foreground", "mt-4"))
+                class=(class!("flex", "justify-center", "items-center", "gap-8", "text-base", "text-muted-foreground", "mt-4"))
             >
                 <a class=(NAV_LINK_CSS) href="/"><span>"Projects"</span></a>
                 <a class=(NAV_LINK_CSS) href="/about"><span>"About"</span></a>
