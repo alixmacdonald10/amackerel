@@ -1,6 +1,6 @@
 [package]
 name = "amackerel"
-version = "0.2.5"
+version = "0.2.6"
 edition = "2021"
 
 [dependencies]
@@ -12,12 +12,12 @@ secrecy = { version = "0.10.3", features = ["serde"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1.0.151"
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
-topcoat = { version = "0.6", features = ["tailwind"] }
+topcoat = { version = "0.6", features = ["tailwind", "ui", "font-fontsource", "icon-iconify"] }
 tracing = "0.1.44"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
 
 [build-dependencies]
-topcoat = { version = "0.6", default-features = false, features = ["tailwind"] }
+topcoat = { version = "0.6", default-features = false, features = ["tailwind", "icon", "icon-iconify"] }
 
 [dev-dependencies]
 temp-env = "0.3.6"

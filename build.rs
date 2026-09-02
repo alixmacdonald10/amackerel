@@ -10,11 +10,16 @@
 //! Cargo's default "rerun when any package file changed", which is exactly what
 //! picks up new utility classes in `view!` markup.
 fn main() {
-    let mut config = topcoat::tailwind::BuildConfig::new().input("style/tailwind.css");
+    let mut config = topcoat::tailwind::BuildConfig::new().input("styles.css");
 
     if std::env::var_os("TAILWIND_CLI").is_some() {
         config = config.executable_env("TAILWIND_CLI");
     }
 
     config.render().unwrap();
+
+    topcoat::icon::iconify::BuildConfig::new()
+        .icon_set("hugeicons")
+        .stage()
+        .unwrap();
 }

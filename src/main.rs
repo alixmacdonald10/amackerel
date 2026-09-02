@@ -1,5 +1,6 @@
 mod app;
 mod cache;
+mod components;
 mod config;
 mod middleware;
 mod projects;
