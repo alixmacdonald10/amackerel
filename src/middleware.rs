@@ -16,7 +16,10 @@ const DEFAULT_HEADERS: &[(&str, &str)] = &[
     ),
     ("cross-origin-opener-policy", "same-origin"),
     ("cross-origin-resource-policy", "same-origin"),
-    ("cache-control", "no-cache, no-store, must-revalidate, private")
+    (
+        "cache-control",
+        "no-cache, no-store, must-revalidate, private",
+    ),
 ];
 
 enum ResponseHeaders {
@@ -112,7 +115,9 @@ mod tests {
 
     fn compiled(variant: ResponseHeaders) -> HeaderMap {
         let mut headers = HeaderMap::new();
-        variant.compile(&mut headers).expect("headers should compile");
+        variant
+            .compile(&mut headers)
+            .expect("headers should compile");
         headers
     }
 

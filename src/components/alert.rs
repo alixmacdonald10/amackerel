@@ -1,6 +1,6 @@
 use topcoat::{
+    view::{class, component, view, Attributes, StaticClass, View},
     Result,
-    view::{Attributes, StaticClass, View, class, component, view},
 };
 
 /// The visual style of an [`alert`].

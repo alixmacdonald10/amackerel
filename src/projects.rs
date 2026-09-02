@@ -27,7 +27,7 @@ pub struct RepositoryMeta {
 pub async fn load_projects(
     app_config: &AppConfig,
     client: &reqwest::Client,
-    curated_repos: &[&str]
+    curated_repos: &[&str],
 ) -> anyhow::Result<Vec<RepositoryMeta>> {
     // NOTE: In future this response can return a bunch of other URLs which can be
     // queried for more information from the Github API. Leave this as the first call
@@ -35,7 +35,7 @@ pub async fn load_projects(
     let mut repos = get_users_public_repos(client, app_config).await?;
 
     let languages = future::join_all(
-        curated_repos 
+        curated_repos
             .iter()
             .map(|repo| get_repo_languages(repo, client, app_config)),
     )

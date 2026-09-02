@@ -3,7 +3,7 @@ use std::str::FromStr;
 use reqwest::header::{HeaderMap, HeaderName, HeaderValue};
 
 pub fn set_header(headers: &mut HeaderMap, name: &str, value: &str) -> anyhow::Result<()> {
-    let value =  HeaderValue::from_str(value)?;
+    let value = HeaderValue::from_str(value)?;
     let name = HeaderName::from_str(name)?;
     headers.insert(name, value);
     Ok(())

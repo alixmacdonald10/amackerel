@@ -1,6 +1,6 @@
 use topcoat::{
+    view::{class, component, view, Attributes, PromotedStr, StaticClass},
     Result,
-    view::{Attributes, PromotedStr, StaticClass, class, component, view},
 };
 
 /// The direction a [`separator`] runs in.

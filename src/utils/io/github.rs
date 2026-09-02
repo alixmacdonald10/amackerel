@@ -22,7 +22,8 @@ pub static GITHUB_MIN_HEADERS: LazyLock<HeaderMap<HeaderValue>> = LazyLock::new(
     headers
 });
 
-pub static GITHUB_URL: LazyLock<String> = LazyLock::new(|| format!("https://github.com/{GITHUB_USERNAME}"));
+pub static GITHUB_URL: LazyLock<String> =
+    LazyLock::new(|| format!("https://github.com/{GITHUB_USERNAME}"));
 
 pub fn compile_github_headers(config: &AppConfig) -> anyhow::Result<HeaderMap<HeaderValue>> {
     let mut map = GITHUB_MIN_HEADERS.clone();
