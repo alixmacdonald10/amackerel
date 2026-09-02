@@ -1,14 +1,18 @@
 use topcoat::{router::page, view::view, Result};
 
-use crate::app::{GITHUB_URL, HIGHLIGHT_CSS, INLINE_NAV_LINK_CSS, PARAGRAPH_CSS};
+use crate::{
+    app::{HIGHLIGHT_CSS, INLINE_NAV_LINK_CSS, PARAGRAPH_CSS},
+    utils::io::github::GITHUB_URL,
+};
 
 #[page("/about")]
 async fn about() -> Result {
+    let url = GITHUB_URL.as_str();
     view! {
-        <article class="flex flex-col text-left max-w-[720px] font-mono mb-8">
+        <article class="flex flex-col text-left mb-8">
             <h1 class="text-4xl font-bold mb-2">"I'm Alix"</h1>
 
-            <p class="mb-8 text-sm text-[var(--color-muted)]">
+            <p class="mb-8 text-sm text-muted-foreground">
                 "Rust - Python - Kubernetes - Postgres"
             </p>
 
@@ -59,7 +63,7 @@ async fn about() -> Result {
                 "Have a look through my "
                 <a
                     class=(INLINE_NAV_LINK_CSS)
-                    href=(GITHUB_URL)
+                    href=(url)
                     target="_blank"
                     rel="noopener"
                 >

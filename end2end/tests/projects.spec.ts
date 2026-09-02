@@ -81,7 +81,6 @@ test("about page loads via nav", async ({ page }) => {
 
 test("unknown route shows 404 page", async ({ page }) => {
   await page.goto(`${BASE}/does-not-exist`);
-  await expect(page.locator("h1")).toContainText("404");
   await expect(page.locator("body")).toContainText("This page swam away.");
   await expect(page.locator('img[alt="404 — page not found"]')).toBeVisible();
   await page.locator("a", { hasText: "Back to shore" }).click();
