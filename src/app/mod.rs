@@ -14,10 +14,22 @@ use topcoat::{
     Result,
 };
 
-use crate::components::{footer::footer, header::header};
+use crate::components::{
+    dark_mode::dark_mode_toggle, footer::footer, header::header,
+};
 
 pub const LOGO: Asset = asset!("public/favicon-light.png");
 pub const MAX_WIDTH: &str = "max-w-[720px]";
+// `MAX_WIDTH` is a plain `&str`, so it cannot join a `StaticClass` const; it is
+// mixed in at the use site instead, where the type is inferred.
+const BODY_CSS: StaticClass = class!(
+    "w-full",
+    "mx-auto",
+    "flex",
+    "flex-col",
+    "items-center",
+    "text-center"
+);
 pub const NAV_LINK_CSS: StaticClass = class!(
     "transition",
     "delay-50",
@@ -66,18 +78,21 @@ async fn root_layout(cx: &Cx, slot: Result) -> Result {
     }?;
 
     view! {
+        signal dark_mode = false;
         <!DOCTYPE html>
-        <html lang="en">
+        <html lang="en" :class=$(if dark_mode.get() { "dark" } else { "" })>
             <head>
                 <meta charset="utf-8">
                 <meta name="viewport" content="width=device-width, initial-scale=1">
                 <title>(title_for(uri(cx).path()))</title>
                 <link rel="icon" type="image/png" href=(LOGO)>
                 topcoat::dev::script()
+                topcoat::runtime::script()
                 topcoat::font::link(font: fontsource_font!(GEIST_MONO))
                 <link rel="stylesheet" href=(tailwind::stylesheet!())>
             </head>
-            <body class=(class!(MAX_WIDTH, "w-full", "mx-auto", "flex", "flex-col", "items-center", "text-center"))>
+            <body class=(class!(MAX_WIDTH, BODY_CSS, "dark:background"))>
+                dark_mode_toggle(dark_mode: dark_mode)
                 header()
                 <main class=(class!("flex", "flex-col", "items-center"))>
                     (content)

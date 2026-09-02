@@ -59,8 +59,15 @@ impl ResponseHeaders {
     /// The content security policy (CSP), with optional extra `script-src` / `connect-src` origins for dev.
     fn csp(extra_script_src: Option<&str>, extra_connect_src: Option<&str>) -> String {
         // TODO: fix the scrappy extra space on None inputs
+        // `'unsafe-eval'` is what topcoat's runtime costs: the browser scanner
+        // turns each `data-topcoat-bind:` / `data-topcoat-on:` payload into a
+        // handler with `new Function`, and CSP counts that as string-to-code
+        // evaluation. Without it the runtime throws while bootstrapping and
+        // nothing on the page is reactive. There is no nonce or hash form of
+        // the exemption, and `script-src` cannot be narrowed to one element,
+        // so this applies to the whole document.
         let script_src = format!(
-            "script-src 'self' {};",
+            "script-src 'self' 'unsafe-eval' {};",
             extra_script_src.unwrap_or_default()
         );
 
@@ -162,7 +169,7 @@ mod tests {
             .to_str()
             .expect("policy should be ascii");
 
-        assert!(csp.contains("script-src 'self' ;"));
+        assert!(csp.contains("script-src 'self' 'unsafe-eval' ;"));
         assert!(csp.contains("connect-src 'self' ;"));
     }
 
@@ -173,7 +180,7 @@ mod tests {
             .to_str()
             .expect("policy should be ascii");
 
-        assert!(csp.contains("script-src 'self' https://example.com;"));
+        assert!(csp.contains("script-src 'self' 'unsafe-eval' https://example.com;"));
         assert!(csp.contains("connect-src 'self' https://example.com wss://example.com;"));
     }
 
@@ -258,7 +265,7 @@ mod tests {
     fn csp_interpolates_the_extra_origins_independently() {
         let csp = ResponseHeaders::csp(Some("https://scripts.test"), Some("wss://sockets.test"));
 
-        assert!(csp.contains("script-src 'self' https://scripts.test;"));
+        assert!(csp.contains("script-src 'self' 'unsafe-eval' https://scripts.test;"));
         assert!(csp.contains("connect-src 'self' wss://sockets.test;"));
     }
 }

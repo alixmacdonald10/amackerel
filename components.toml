@@ -19,3 +19,7 @@ file = "src/components/card.rs"
 [registries.topcoat.components.separator]
 hash = "sha256:2504fa590bcf7d32ca4737c35fe57aee0ff95b3595e502f3eb59ebac2d704175"
 file = "src/components/separator.rs"
+
+[registries.topcoat.components.toggle]
+hash = "sha256:d061afc50d0478803a95ba9b0c44816735fae7aeb6047d7272f69d7cd4b60e43"
+file = "src/components/toggle.rs"
