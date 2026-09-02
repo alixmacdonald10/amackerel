@@ -1,1 +1,2 @@
 10049	IGNORE	(Storable and Cacheable Content - informational; hashed static assets are intentionally immutable-cacheable)
+90003	IGNORE	(Sub Resource Integrity Attribute Missing - Fontsource preloads resolve @latest on cdn.jsdelivr.net, so no stable hash exists to pin; topcoat font::link emits no integrity attribute. Domain is allowlisted in font-src.)

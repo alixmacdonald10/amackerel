@@ -9,18 +9,19 @@ use crate::utils::io::request::set_header;
 const DEFAULT_HEADERS: &[(&str, &str)] = &[
     ("x-frame-options", "DENY"),
     ("x-content-type-options", "nosniff"),
-    ("referrer-policy", "no-refferer"),
+    ("referrer-policy", "no-referrer"),
     (
         "permissions-policy",
         "geolocation=(), microphone=(), camera=()",
     ),
     ("cross-origin-opener-policy", "same-origin"),
     ("cross-origin-resource-policy", "same-origin"),
+    ("cache-control", "no-cache, no-store, must-revalidate, private")
 ];
 
 enum ResponseHeaders {
-    Prod { origin: String },
-    Dev,
+    Dev { origin: String },
+    Prod,
 }
 
 impl ResponseHeaders {
@@ -30,7 +31,7 @@ impl ResponseHeaders {
         }
 
         match self {
-            ResponseHeaders::Prod { origin } => {
+            ResponseHeaders::Dev { origin } => {
                 let ws = origin
                     .replacen("https://", "wss://", 1)
                     .replacen("http://", "ws://", 1);
@@ -40,7 +41,7 @@ impl ResponseHeaders {
                     Self::csp(Some(&origin.to_string()), Some(&format!("{origin} {ws}"))).as_str(),
                 )?;
             }
-            ResponseHeaders::Dev => {
+            ResponseHeaders::Prod => {
                 set_header(headers, "cross-origin-embedder-policy", "require-corp")?;
                 set_header(
                     headers,
@@ -66,10 +67,13 @@ impl ResponseHeaders {
         );
 
         format!(
-            "{}{}{}{}{}{}{}{}{}",
+            "{}{}{}{}{}{}{}{}{}{}",
             "default-src 'self';",
             script_src,
             "style-src 'self';",
+            // Fontsource serves the Geist woff2 files; the stylesheet that
+            // references them is still same-origin.
+            "font-src 'self' https://cdn.jsdelivr.net;",
             "img-src 'self' data:;",
             connect_src,
             "object-src 'none';",
@@ -93,8 +97,8 @@ pub fn security_headers<'a>(cx: &'a Cx, body: Body, next: Next<'a>) -> LayerFutu
         let headers = response.headers_mut();
 
         match crate::utils::dev_origin() {
-            None => ResponseHeaders::Dev,
-            Some(origin) => ResponseHeaders::Prod { origin },
+            None => ResponseHeaders::Prod,
+            Some(origin) => ResponseHeaders::Dev { origin },
         }
         .compile(headers)?;
 
@@ -112,8 +116,8 @@ mod tests {
         headers
     }
 
-    fn prod(origin: &str) -> HeaderMap {
-        compiled(ResponseHeaders::Prod {
+    fn dev(origin: &str) -> HeaderMap {
+        compiled(ResponseHeaders::Dev {
             origin: origin.to_string(),
         })
     }
@@ -126,29 +130,29 @@ mod tests {
 
     #[test]
     fn both_variants_carry_every_default_header() {
-        assert_carries_default_headers(&compiled(ResponseHeaders::Dev));
-        assert_carries_default_headers(&prod("https://example.com"));
+        assert_carries_default_headers(&compiled(ResponseHeaders::Prod));
+        assert_carries_default_headers(&dev("https://example.com"));
     }
 
     #[test]
     fn both_variants_set_a_content_security_policy() {
-        assert!(compiled(ResponseHeaders::Dev).contains_key("content-security-policy"));
-        assert!(prod("https://example.com").contains_key("content-security-policy"));
+        assert!(compiled(ResponseHeaders::Prod).contains_key("content-security-policy"));
+        assert!(dev("https://example.com").contains_key("content-security-policy"));
     }
 
     #[test]
-    fn dev_sets_cross_origin_embedder_policy_but_prod_does_not() {
+    fn prod_sets_cross_origin_embedder_policy_but_dev_does_not() {
         assert_eq!(
-            compiled(ResponseHeaders::Dev)["cross-origin-embedder-policy"],
+            compiled(ResponseHeaders::Prod)["cross-origin-embedder-policy"],
             "require-corp"
         );
         // require-corp would block the live-reload script served from the other origin.
-        assert!(!prod("https://example.com").contains_key("cross-origin-embedder-policy"));
+        assert!(!dev("https://example.com").contains_key("cross-origin-embedder-policy"));
     }
 
     #[test]
-    fn dev_policy_allows_no_extra_origins() {
-        let headers = compiled(ResponseHeaders::Dev);
+    fn prod_policy_allows_no_extra_origins() {
+        let headers = compiled(ResponseHeaders::Prod);
         let csp = headers["content-security-policy"]
             .to_str()
             .expect("policy should be ascii");
@@ -158,8 +162,8 @@ mod tests {
     }
 
     #[test]
-    fn prod_policy_allows_the_origin_for_scripts_and_its_websocket_for_connections() {
-        let headers = prod("https://example.com");
+    fn dev_policy_allows_the_origin_for_scripts_and_its_websocket_for_connections() {
+        let headers = dev("https://example.com");
         let csp = headers["content-security-policy"]
             .to_str()
             .expect("policy should be ascii");
@@ -169,8 +173,8 @@ mod tests {
     }
 
     #[test]
-    fn prod_derives_an_insecure_websocket_scheme_from_an_http_origin() {
-        let headers = prod("http://localhost:3000");
+    fn dev_derives_an_insecure_websocket_scheme_from_an_http_origin() {
+        let headers = dev("http://localhost:3000");
         let csp = headers["content-security-policy"]
             .to_str()
             .expect("policy should be ascii");
@@ -179,8 +183,8 @@ mod tests {
     }
 
     #[test]
-    fn prod_rewrites_only_the_scheme_not_a_later_occurrence() {
-        let headers = prod("https://example.com/https://nested");
+    fn dev_rewrites_only_the_scheme_not_a_later_occurrence() {
+        let headers = dev("https://example.com/https://nested");
         let csp = headers["content-security-policy"]
             .to_str()
             .expect("policy should be ascii");
@@ -190,10 +194,10 @@ mod tests {
     }
 
     #[test]
-    fn prod_errors_on_an_origin_with_invalid_header_bytes() {
+    fn dev_errors_on_an_origin_with_invalid_header_bytes() {
         let mut headers = HeaderMap::new();
 
-        let result = ResponseHeaders::Prod {
+        let result = ResponseHeaders::Dev {
             origin: "https://exa\nmple.com".to_string(),
         }
         .compile(&mut headers);
@@ -207,7 +211,7 @@ mod tests {
         headers.insert("x-frame-options", "SAMEORIGIN".parse().unwrap());
         headers.insert("content-security-policy", "default-src *".parse().unwrap());
 
-        ResponseHeaders::Dev
+        ResponseHeaders::Prod
             .compile(&mut headers)
             .expect("headers should compile");
 
@@ -226,6 +230,7 @@ mod tests {
         for directive in [
             "default-src 'self';",
             "style-src 'self';",
+            "font-src 'self' https://cdn.jsdelivr.net;",
             "img-src 'self' data:;",
             "object-src 'none';",
             "base-uri 'self';",
