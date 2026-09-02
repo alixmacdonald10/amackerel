@@ -11,13 +11,15 @@ use topcoat::{
 
 use crate::{
     app::{INLINE_NAV_LINK_CSS, PARAGRAPH_CSS},
-    cache::TTLCache,
+    cache::{generate_cache_key, TTLCache},
     components::{
         alert::{alert, alert_description, alert_title, AlertVariant},
         card::{card, card_description, card_footer, card_header, card_title},
         empty::empty,
     },
+    config::AppConfig,
     projects::{load_projects, RepositoryMeta},
+    utils::io::github::CURATED_REPOS,
 };
 
 /// The homepage. The GitHub fetch is awaited directly in the component — no
@@ -47,11 +49,13 @@ async fn project_results(cx: &Cx, reload: bool) -> Result {
 
     // TODO: a better way to impl this caching
     let cache = app_context::<Arc<TTLCache>>(cx);
-    let key = "load_projects";
-    let projects = if let Some(value) = cache.get::<Vec<RepositoryMeta>>(key) {
+    let key = generate_cache_key("load_projects", CURATED_REPOS.join(":").as_str());
+    let projects = if let Some(value) = cache.get::<Vec<RepositoryMeta>>(&key) {
         Ok(value.to_vec())
     } else {
-        load_projects(cx).await
+        let client = app_context::<reqwest::Client>(cx);
+        let app_config = app_context::<AppConfig>(cx);
+        load_projects(app_config, client, CURATED_REPOS).await
     };
 
     match projects {
@@ -61,7 +65,7 @@ async fn project_results(cx: &Cx, reload: bool) -> Result {
             tracing::info!("Func call time elapsed: {elapsed:#?}");
 
             // TODO: This is silly and always updates the cache
-            let _ = cache.insert(key, list.clone());
+            let _ = cache.insert(&key, list.clone());
 
             view! { <ul>
                 for RepositoryMeta { name, description, languages, stars, url, .. } in list {

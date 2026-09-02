@@ -9,7 +9,7 @@ pub const GITHUB_USERNAME: &str = "alixmacdonald10";
 
 /// Hand-picked repos to show off, as bare repo names owned by [GITHUB_USERNAME].
 /// Edit this list (and rebuild) to change which projects appear.
-pub const CURATED_REPOS: &[&str] = &["amackerel", "chronofile", "tacklebox"];
+pub const CURATED_REPOS: &[&str] = &["amackerel", "chronofile"];
 
 pub const GITHUB_API_URL: &str = "https://api.github.com";
 

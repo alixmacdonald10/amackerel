@@ -2,7 +2,6 @@ use std::collections::HashMap;
 
 use futures::future;
 use serde::Deserialize;
-use topcoat::context::{app_context, Cx};
 
 use crate::{
     config::AppConfig,
@@ -25,17 +24,18 @@ pub struct RepositoryMeta {
 ///
 /// Any cached list is served immediately and an expired one is refreshed in the background, so
 /// only a cold start ever waits on GitHub. `Unavailable` means there is nothing at all to show.
-pub async fn load_projects(cx: &Cx) -> anyhow::Result<Vec<RepositoryMeta>> {
-    let client = app_context::<reqwest::Client>(cx);
-    let app_config = app_context::<AppConfig>(cx);
-
+pub async fn load_projects(
+    app_config: &AppConfig,
+    client: &reqwest::Client,
+    curated_repos: &[&str]
+) -> anyhow::Result<Vec<RepositoryMeta>> {
     // NOTE: In future this response can return a bunch of other URLs which can be
     // queried for more information from the Github API. Leave this as the first call
     // then use join all for future subsequent calls.
     let mut repos = get_users_public_repos(client, app_config).await?;
 
     let languages = future::join_all(
-        CURATED_REPOS
+        curated_repos 
             .iter()
             .map(|repo| get_repo_languages(repo, client, app_config)),
     )

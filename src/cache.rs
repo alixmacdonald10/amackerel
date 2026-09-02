@@ -12,6 +12,8 @@ const CACHE_TTL: Duration = Duration::from_mins(5);
 /// `Send + Sync` so the cache itself is shareable across worker threads.
 type CacheValue = Arc<dyn Any + Send + Sync>;
 
+// TODO: implement a TTL checker
+// TODO: once required impl a LRU removal policy
 pub struct TTLCache {
     cache: RwLock<HashMap<String, CacheEntry>>,
     ttl: Duration,
@@ -33,6 +35,7 @@ impl TTLCache {
     ///
     /// An expired entry is dropped as a side effect of the lookup.
     pub fn get<T: Any + Send + Sync>(&self, key: &str) -> Option<Arc<T>> {
+        tracing::debug!("Checking cache for key: {key}");
         let state = {
             let cache_guard = self.read();
             if let Some(entry) = cache_guard.get(key) {
@@ -71,7 +74,7 @@ impl TTLCache {
     }
 
     /// Stores `value` under `key`, replacing and returning any entry already there.
-    pub fn insert<T: Any + Send + Sync>(&self, key: &str, value: T) -> Option<CacheEntry> {
+    pub fn insert<T: Any + Send + Sync>(&self, key: impl ToString, value: T) -> Option<CacheEntry> {
         let entry = CacheEntry::new(value);
         self.write().insert(key.to_string(), entry)
     }
@@ -121,6 +124,14 @@ enum EntryState {
     Hit(CacheValue),
     Miss,
     Expired,
+}
+
+/// Generates a cache key
+///
+/// Uses the function name and the arguments to create a unique hash which is updatable.
+/// It is recommended to pass all arguments as a : seperated &str.
+pub fn generate_cache_key(function_name: &str, args: &str) -> String {
+    format!("{function_name}::args__{args}")
 }
 
 #[cfg(test)]
