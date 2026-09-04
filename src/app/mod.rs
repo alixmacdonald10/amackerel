@@ -16,7 +16,7 @@ use topcoat::{
 
 use crate::components::{footer::footer, header::header};
 
-pub const LOGO: Asset = asset!("public/favicon-light.png");
+pub const LOGO: Asset = asset!("public/favicon.svg");
 pub const MAX_WIDTH: &str = "max-w-[720px]";
 pub const NAV_LINK_CSS: StaticClass = class!(
     "transition",
@@ -67,7 +67,7 @@ async fn root_layout(cx: &Cx, slot: Result) -> Result {
 
     view! {
         <!DOCTYPE html>
-        <html lang="en">
+        <html lang="en" class="dark">
             <head>
                 <meta charset="utf-8">
                 <meta name="viewport" content="width=device-width, initial-scale=1">
