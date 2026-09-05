@@ -9,7 +9,7 @@ use crate::{
 async fn about() -> Result {
     let url = GITHUB_URL.as_str();
     view! {
-        <article class="flex flex-col text-left mb-8">
+        <article class="flex flex-col text-left mb-8" data-marker="transition-marker">
             <h1 class="text-4xl font-bold mb-2">"I'm Alix"</h1>
 
             <p class="mb-8 text-sm text-muted-foreground">

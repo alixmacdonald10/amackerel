@@ -95,3 +95,13 @@
     @apply bg-background font-mono text-foreground;
   }
 }
+
+@media (prefers-reduced-motion: no-preference) {
+    @view-transition {
+      navigation: auto;
+    }
+}
+
+.transition-marker {
+  view-transition-name: diff;
+}
