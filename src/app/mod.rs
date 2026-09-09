@@ -51,7 +51,6 @@ pub const INLINE_NAV_LINK_CSS: StaticClass = class!(
 );
 pub const HIGHLIGHT_CSS: StaticClass = class!("font-bold", "text-primary");
 pub const PARAGRAPH_CSS: StaticClass = class!("mt-4", "mb-4", "break-normal");
-pub const MED_IMAGE_CSS: StaticClass = class!("w-full", "max-w-[420px]");
 
 /// The base page layout
 #[layout("/")]

@@ -1,12 +1,7 @@
 use std::sync::Arc;
 
 use topcoat::{
-    context::{app_context, Cx},
-    icon::{icon, iconify::iconify_icon},
-    router::page,
-    runtime::shard,
-    view::{attributes, class, view},
-    Result,
+    Result, context::{Cx, app_context}, icon::{icon, iconify::iconify_icon}, router::page, runtime::shard, view::{StaticClass, attributes, class, view},
 };
 
 use crate::{
@@ -20,6 +15,25 @@ use crate::{
     config::AppConfig,
     projects::{load_projects, RepositoryMeta},
     utils::io::github::CURATED_REPOS,
+};
+
+const LANGUAGES_CSS: StaticClass = class!{
+    "rounded-xl",
+    "px-2",
+    "py-1",
+    "text-sm",
+    "text-muted-foreground",
+    "bg-muted-foreground/10",
+    "transition",
+    "delay-50",
+    "duration-200",
+    "ease-in-out",
+    "hover:text-primary",
+    "hover:-translate-y-1",
+    "hover:scale-110",
+    "focus-visible:outline-2",
+    "focus-visible:outline-offset-2",
+    "focus-visible:outline-ring"
 };
 
 /// The homepage. The GitHub fetch is awaited directly in the component — no
@@ -97,9 +111,7 @@ async fn project_results(cx: &Cx, reload: bool) -> Result {
                                  card_footer(
                                      attrs: attributes! { class="flex-wrap justify-center gap-2" },
                                      for language in &languages.unwrap_or(vec![]) {
-                                         <span
-                                             class="rounded-xl px-2 py-1 text-sm text-muted-foreground bg-muted-foreground/10"
-                                         >
+                                         <span class=(LANGUAGES_CSS)>
                                              (language.as_str())
                                          </span>
                                      }
