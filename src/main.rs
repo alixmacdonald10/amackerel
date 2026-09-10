@@ -12,15 +12,12 @@ use topcoat::{
     asset::{AssetBundle, RouterBuilderAssetExt},
     router::{LayerFn, Path, Router, RouterBuilderDiscoverExt},
 };
-use tracing_subscriber::EnvFilter;
 
-use crate::{cache::TTLCache, config::AppConfig, middleware::security_headers};
+use crate::{cache::TTLCache, config::AppConfig, middleware::security_headers, utils::telemetry};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::from_default_env())
-        .init();
+    let _guard = telemetry::setup_tracing()?;
 
     let http_client = reqwest::Client::new();
     let app_config = AppConfig::load()?;

@@ -26,8 +26,12 @@ write_files:
       TimeoutStartSec=300
       ExecStartPre=-/usr/bin/docker rm -f amackerel
       ExecStartPre=/usr/bin/docker pull ${image}
+      ExecStartPre=/usr/bin/mkdir -p /var/log/amackerel
       ExecStart=/usr/bin/docker run --rm --name amackerel \
         -p 127.0.0.1:8080:8080 \
+        -v /var/log/amackerel:/var/lib/amackerel/state \
+        -e XDG_STATE_HOME=/var/lib/amackerel/state \
+        -e RUST_LOG=amackerel=info,warn \
         ${image}
       ExecStop=/usr/bin/docker stop amackerel
 
@@ -55,6 +59,37 @@ write_files:
 
       [Install]
       WantedBy=multi-user.target
+
+  # systemd unit that cleans up old log files from /var/log/amackerel (the host
+  # side of the container's XDG_STATE_HOME mount) if they are older than 30 days
+  - path: /etc/systemd/system/cleaner-upper.service
+    permissions: "0644"
+    content: |
+      [Unit]
+      Description=Clean up log files older than 30 days from /var/log/amackerel
+      After=local-fs.target
+
+      [Service]
+      Type=oneshot
+      ExecStart=/usr/bin/find /var/log/amackerel -type f -name "app.log.*" -mtime +30 -delete
+
+      [Install]
+      WantedBy=multi-user.target
+
+  # timer that triggers cleaner-upper.service daily
+  - path: /etc/systemd/system/cleaner-upper.timer
+    permissions: "0644"
+    content: |
+      [Unit]
+      Description=Run cleaner-upper.service daily
+
+      [Timer]
+      OnCalendar=daily
+      Persistent=true
+      RandomizedDelaySec=15m
+
+      [Install]
+      WantedBy=timers.target
 
 runcmd:
   # Docker

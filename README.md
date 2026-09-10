@@ -40,7 +40,8 @@ prefix. Everything is optional — the app boots with none of it set.
 | Variable | Effect |
 |----------|--------|
 | `APP_GITHUB_TOKEN` | Sent as `Authorization: Bearer` on GitHub API calls. Unset, requests are unauthenticated and share the 60-req/hour per-IP rate limit; a token raises that to 5000/hour. Only needs public-repo read scope. |
-| `RUST_LOG` | `tracing-subscriber` env filter, e.g. `RUST_LOG=amackerel=debug`. Unset, nothing is logged. |
+| `RUST_LOG` | `tracing-subscriber` env filter, e.g. `RUST_LOG=amackerel=debug`. Unset, defaults to `amackerel=info,warn`. |
+| `XDG_STATE_HOME` | Base directory for the rolling log files, written to `$XDG_STATE_HOME/amackerel/app.log.YYYY-MM-DD`. Unset, falls back to `$HOME/.local/state`. |
 | `HOST` / `PORT` | Bind address for the built binary; default `127.0.0.1:3000`. |
 
 The prefix matters: a bare `GITHUB_TOKEN` in your shell is ignored, so an unrelated
@@ -350,6 +351,10 @@ Force an immediate redeploy of the latest image (bypass the 5-min poll):
 ```bash
 systemctl restart amackerel
 ```
+
+#### App Logs
+You can view the app logs by going to the `/var/log/amackerel` directory of the Droplet and this contains daily app log files. These are cleaned up with a 30 day retention period.
+
 
 ## License
 

@@ -1,6 +1,6 @@
 [package]
 name = "amackerel"
-version = "0.2.10"
+version = "0.2.11"
 edition = "2021"
 
 [dependencies]
@@ -14,6 +14,7 @@ serde_json = "1.0.151"
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 topcoat = { version = "0.6", features = ["tailwind", "ui", "font-fontsource", "icon-iconify"] }
 tracing = "0.1.44"
+tracing-appender = "0.2.5"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
 
 [build-dependencies]

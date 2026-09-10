@@ -1,4 +1,5 @@
 pub mod io;
+pub mod telemetry;
 
 /// True when running under `topcoat dev`, which serves its live-reload client
 /// script from a second origin.
