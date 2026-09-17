@@ -7,7 +7,7 @@
 Developer website built with [topcoat](https://github.com/tokio-rs/topcoat) —
 server-rendered Rust, **no WebAssembly and no client-side JavaScript**. The
 homepage showcases a curated set of GitHub projects, fetched live from the GitHub
-API and cached server-side.
+GraphQL API and cached server-side.
 
 Pages are `async fn`s annotated with `#[page]`; they `.await` the data they need
 directly, because rendering happens on the server that owns the cache. There is
@@ -35,11 +35,12 @@ topcoat dev
 ## Configuration
 
 Config is read from the environment at startup (`src/config.rs`), using the `APP_`
-prefix. Everything is optional — the app boots with none of it set.
+prefix. `APP_GITHUB_TOKEN` is required — the app fails to boot without it.
+Everything else is optional.
 
 | Variable | Effect |
 |----------|--------|
-| `APP_GITHUB_TOKEN` | Sent as `Authorization: Bearer` on GitHub API calls. Unset, requests are unauthenticated and share the 60-req/hour per-IP rate limit; a token raises that to 5000/hour. Only needs public-repo read scope. |
+| `APP_GITHUB_TOKEN` | **Required.** Sent as `Authorization: Bearer` on GitHub GraphQL API calls. GraphQL has no anonymous tier, so a token is mandatory; it draws from GitHub's points-based budget (5000 points/hour authenticated). Only needs public-repo read scope. |
 | `RUST_LOG` | `tracing-subscriber` env filter, e.g. `RUST_LOG=amackerel=debug`. Unset, defaults to `amackerel=info,warn`. |
 | `XDG_STATE_HOME` | Base directory for the rolling log files, written to `$XDG_STATE_HOME/amackerel/app.log.YYYY-MM-DD`. Unset, falls back to `$HOME/.local/state`. |
 | `HOST` / `PORT` | Bind address for the built binary; default `127.0.0.1:3000`. |
@@ -185,6 +186,34 @@ The pipeline tags `0.1.1` and publishes on success. Pull the image:
 docker pull ghcr.io/alixmacdonald10/amackerel:latest
 ```
 
+### Provisioning infrastructure
+
+`.github/workflows/infrastructure.yml` is a manual (`workflow_dispatch`) pipeline
+for applying the Terraform/OpenTofu config in `infrastructure/` from CI instead of
+a local `tofu apply`. Pick `apply` or `destroy`; `destroy` additionally requires
+typing `destroy` into `confirm_destroy` or the run fails before touching any
+infrastructure.
+
+| Stage | What it does |
+|-------|--------------|
+| **audit** | Trivy IaC scan (`scan-type: config`) over `infrastructure/`, fails on CRITICAL/HIGH |
+| **validate** | rejects a `destroy` run unless `confirm_destroy` is exactly `destroy` |
+| **plan** | `tofu init` + `tofu plan` (or `plan -destroy`), uploads the plan artifact |
+| **apply** | gated behind the `production` GitHub environment; downloads the plan and runs `tofu apply` on it |
+
+Needs `DO_TOKEN`, `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`,
+`CLOUDFLARE_DNS_ZONE_ID` and `GH_API_TOKEN` set as repo or environment secrets —
+the same values you'd otherwise put in `terraform.tfvars` (see
+[Deploying](#deploying)).
+
+> **Saving these secrets:** repo **Settings → Secrets and variables → Actions →
+> New repository secret** for each of the five above; or, since `apply` is
+> already gated behind the `production` environment, scope them there instead
+> via **Settings → Environments → production → Environment secrets**.
+> `GH_API_TOKEN` needs the same scope as `APP_GITHUB_TOKEN` (public-repo read) —
+> it's the value Terraform forwards to the droplet as the app's own runtime
+> token (see [Configuration](#configuration)).
+
 ## Infrastructure
 
 Production runs on a single [DigitalOcean](https://www.digitalocean.com/) droplet,
@@ -200,8 +229,10 @@ special chars), and the droplet's `cloudflared --token` value comes from the
 `cloudflare_zero_trust_tunnel_cloudflared_token` data source, passed into
 cloud-init. The last ingress rule is the required catch-all (`http_status:404`).
 
-The startup script installs Docker + `cloudflared`, then runs two systemd
-services: `amackerel.service` (the app) and `watchtower.service` (auto-updater).
+The startup script installs Docker + `cloudflared`, then runs three systemd
+units: `amackerel.service` (the app), `watchtower.service` (auto-updater), and
+`cleaner-upper.timer` — runs `cleaner-upper.service` daily to delete
+`/var/log/amackerel` log files older than 30 days (see [App Logs](#app-logs)).
 
 State is stored remotely in a **Cloudflare R2 bucket** (`amackerel-iac`) via the
 S3-compatible `backend "s3"` block in `providers.tf`. R2 isn't real S3, so the backend
@@ -261,8 +292,17 @@ flowchart LR
    **R2 API token** (Cloudflare dashboard → R2 → Manage API Tokens) — gives the
    Access Key ID / Secret Access Key used by the backend. (The R2 Storage scopes
    above cover this if you reuse the same token.)
+6. A GitHub **personal access token** with public-repo read scope, for the app's
+   own `APP_GITHUB_TOKEN` (see [Configuration](#configuration)) — required, since
+   GitHub's GraphQL API has no anonymous tier.
 
 ### Deploying
+
+> **Deploying:** production changes go through the `infrastructure.yml` pipeline
+> (Actions → Run workflow → `apply`/`destroy`), gated behind the `production`
+> environment — never run `tofu apply` against production state from a laptop.
+> The steps below are for local `plan`s / testing the config, and to know which
+> secrets the pipeline needs.
 
 Create `infrastructure/terraform.tfvars` (gitignored — never commit it):
 
@@ -271,8 +311,13 @@ do_token               = "dop_v1_..."
 cloudflare_api_token   = "cfat_..."
 cloudflare_account_id  = "<cloudflare-account-id>"
 cloudflare_dns_zone_id = "<amackerel.dev-zone-id>"
+gh_api_token           = "ghp_..."
 # image = "ghcr.io/alixmacdonald10/amackerel:latest"  # optional override
 ```
+
+`gh_api_token` is passed to the droplet as the app's own `APP_GITHUB_TOKEN` (see
+[Configuration](#configuration)) — a GitHub token with public-repo read scope, not
+a Terraform/Cloudflare credential.
 
 The tunnel connector token is **not** a variable — Terraform generates the tunnel
 secret and derives the token itself, so cloud-init gets it automatically.
