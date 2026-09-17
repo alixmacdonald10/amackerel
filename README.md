@@ -90,8 +90,7 @@ The builder installs the **musl** Tailwind CLI and points `build.rs` at it via
 `TAILWIND_CLI`, because topcoat only ever downloads the glibc build, which cannot
 run on Alpine. The runtime stage holds just the binary and `assets/` next to it —
 `AssetBundle::load()` reads `assets/manifest.toml` from the executable's own
-directory and nowhere else. The runtime stage runs as an unprivileged `app` user,
-not root.
+directory and nowhere else.
 
 ```bash
 docker build -t amackerel .

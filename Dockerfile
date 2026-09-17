@@ -25,17 +25,13 @@ FROM alpine:3.21 AS runner
 
 RUN apk add --no-cache libgcc
 
-RUN addgroup -S app && adduser -S app -G app
-
 ENV HOST="0.0.0.0"
 ENV PORT="8080"
 
 WORKDIR /app
 
-COPY --from=builder --chown=app:app /work/target/release/amackerel /app/
-COPY --from=builder --chown=app:app /work/target/release/assets /app/assets
-
-USER app
+COPY --from=builder /work/target/release/amackerel /app/
+COPY --from=builder /work/target/release/assets /app/assets
 
 EXPOSE 8080
 
