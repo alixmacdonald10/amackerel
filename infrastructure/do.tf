@@ -4,7 +4,7 @@ resource "digitalocean_project" "amackerel" {
   purpose     = "Web Application"
   environment = "Production"
   resources = [
-    "${digitalocean_droplet.amackerel.urn}"
+    digitalocean_droplet.amackerel.urn
   ]
 }
 
@@ -25,8 +25,9 @@ resource "digitalocean_droplet" "amackerel" {
   tags       = [local.project_name, "prod"]
 
   user_data = templatefile("${path.module}/cloud-init.yaml.tftpl", {
-    image           = var.image
-    cf_tunnel_token = data.cloudflare_zero_trust_tunnel_cloudflared_token.amackerel.token
+    image            = var.image
+    cf_tunnel_token  = data.cloudflare_zero_trust_tunnel_cloudflared_token.amackerel.token
+    github_api_token = var.gh_api_token
   })
 }
 

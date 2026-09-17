@@ -1,11 +1,14 @@
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
-use futures::future;
-use serde::Deserialize;
+use reqwest::header::HeaderMap;
+use serde::{Deserialize, Deserializer};
 
 use crate::{
     config::AppConfig,
-    utils::io::github::{compile_github_headers, CURATED_REPOS, GITHUB_API_URL, GITHUB_USERNAME},
+    utils::io::{
+        github::{compile_github_headers, GITHUB_API_URL, GITHUB_USERNAME},
+        request::GraphQLResult,
+    },
 };
 
 /// Metadata for a single GitHub project, shown as a card on the homepage.
@@ -13,11 +16,47 @@ use crate::{
 pub struct RepositoryMeta {
     pub name: String,
     pub description: String,
-    pub languages: Option<Vec<String>>,
-    #[serde(rename = "stargazers_count")]
+    #[serde(
+        rename = "primaryLanguage",
+        deserialize_with = "deserialize_primary_language"
+    )]
+    pub primary_language: String,
+    #[serde(rename = "languages", deserialize_with = "deserialize_languages")]
+    pub languages: Vec<String>,
+    #[serde(rename = "stargazerCount")]
     pub stars: u32,
-    #[serde(rename = "html_url")]
     pub url: String,
+}
+
+fn deserialize_languages<'de, D>(deserializer: D) -> Result<Vec<String>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    #[derive(Deserialize)]
+    struct Languages {
+        nodes: Vec<Language>,
+    }
+
+    #[derive(Deserialize)]
+    struct Language {
+        name: String,
+    }
+
+    let langs = Languages::deserialize(deserializer)?;
+    Ok(langs.nodes.into_iter().map(|l| l.name).collect())
+}
+
+fn deserialize_primary_language<'de, D>(deserializer: D) -> Result<String, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    #[derive(Deserialize)]
+    struct Language {
+        name: String,
+    }
+
+    let lang = Language::deserialize(deserializer)?;
+    Ok(lang.name)
 }
 
 /// Returns the curated project list, stale-while-revalidate
@@ -28,78 +67,44 @@ pub async fn load_projects(
     app_config: &AppConfig,
     client: &reqwest::Client,
     curated_repos: &[&str],
-) -> anyhow::Result<Vec<RepositoryMeta>> {
-    // NOTE: In future this response can return a bunch of other URLs which can be
-    // queried for more information from the Github API. Leave this as the first call
-    // then use join all for future subsequent calls.
-    let mut repos = get_users_public_repos(client, app_config).await?;
+) -> anyhow::Result<BTreeMap<String, RepositoryMeta>> {
+    // TODO: have a compile query helper func
+    let mut repos_query = vec![];
+    for repo in curated_repos {
+        repos_query.push(format!(r#"
+        {repo}: repository(owner: "{GITHUB_USERNAME}", name: "{repo}") {{ 
+            name description url stargazerCount primaryLanguage {{ name }} languages(first:10) {{ nodes  {{ name }} }} 
+        }}"#));
+    }
+    let query = format!(r#"query {{ {} }}"#, repos_query.join(" "));
 
-    let languages = future::join_all(
-        curated_repos
-            .iter()
-            .map(|repo| get_repo_languages(repo, client, app_config)),
-    )
-    .await;
+    let headers = compile_github_headers(app_config)?;
 
-    // TODO: optimise this from o(n2)
-    for repo in repos.iter_mut() {
-        for item in &languages {
-            match item {
-                Ok((name, languages)) => {
-                    if *repo.name == *name {
-                        repo.languages = Some(languages.clone());
-                    }
-                }
-                Err(err) => {
-                    tracing::error!("An error occured fetching languages: {}", err.to_string())
-                }
-            }
+    let res = get_users_repo_data(client, &headers, &query).await?;
+    match res {
+        GraphQLResult::Ok(repos) => Ok(repos),
+        GraphQLResult::Err(error) => {
+            Err(anyhow::anyhow!("Error running GraphQL Query: {error:#?}"))
         }
     }
-
-    Ok(repos)
 }
 
 /// Returns all public repositories for a specific Github user
-async fn get_users_public_repos(
+async fn get_users_repo_data(
     client: &reqwest::Client,
-    config: &AppConfig,
-) -> anyhow::Result<Vec<RepositoryMeta>> {
-    let repos = client
-        .get(format!("{GITHUB_API_URL}/users/{GITHUB_USERNAME}/repos"))
-        .headers(compile_github_headers(config)?)
+    headers: &HeaderMap,
+    query: &str,
+) -> anyhow::Result<GraphQLResult<BTreeMap<String, RepositoryMeta>>> {
+    let body = serde_json::json!({ "query": query, "variables": {} });
+
+    let resp = client
+        .post(format!("{GITHUB_API_URL}/graphql"))
+        .headers(headers.to_owned())
+        .json(&body)
         .send()
-        .await?
-        .json::<Vec<RepositoryMeta>>()
         .await?;
 
-    Ok(repos
-        .into_iter()
-        .filter(|repo| CURATED_REPOS.contains(&repo.name.as_str()))
-        .collect::<Vec<RepositoryMeta>>())
-}
-
-/// Returns all languages for a Github repository
-async fn get_repo_languages(
-    repo: &str,
-    client: &reqwest::Client,
-    config: &AppConfig,
-) -> anyhow::Result<(String, Vec<String>)> {
-    let language_map = client
-        .get(format!(
-            "{GITHUB_API_URL}/repos/{GITHUB_USERNAME}/{repo}/languages"
-        ))
-        .headers(compile_github_headers(config)?)
-        .send()
-        .await?
-        .json::<HashMap<String, u32>>()
-        .await?;
-
-    Ok((
-        repo.to_string(),
-        language_map
-            .keys()
-            .map(|x| x.to_owned())
-            .collect::<Vec<String>>(),
-    ))
+    Ok(resp
+        .json::<GraphQLResult<BTreeMap<String, RepositoryMeta>>>()
+        .await?)
 }

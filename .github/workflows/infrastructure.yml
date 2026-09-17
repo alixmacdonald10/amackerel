@@ -1,0 +1,117 @@
+name: CI
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: "Terraform action to run"
+        type: choice
+        options: [apply, destroy]
+        default: apply
+      confirm_destroy:
+        description: "Type 'destroy' to confirm — required only when action=destroy"
+        type: string
+        default: ""
+
+# Cancel superseded runs on the same ref.
+concurrency:
+  group: infrastructure-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  IMAGE: ghcr.io/${{ github.repository }}
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read # Required to checkout and read repo files
+      security-events: write # Required to upload SARIF files to Security tab
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run Trivy vulnerability scanner in IaC mode
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: "config"
+          hide-progress: true
+          format: "sarif"
+          output: "trivy-results.sarif"
+          exit-code: "1"
+          severity: "CRITICAL,HIGH"
+
+      - name: Upload Trivy scan results to GitHub Security tab
+        if: always()
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: "trivy-results.sarif"
+
+  validate:
+    name: Validate inputs
+    runs-on: ubuntu-latest
+    needs: [audit]
+    steps:
+      - name: Require typed confirmation for destroy
+        if: inputs.action == 'destroy' && inputs.confirm_destroy != 'destroy'
+        run: |
+          echo "::error::action=destroy requires confirm_destroy set to exactly 'destroy'."
+          exit 1
+
+  plan:
+    name: IAC Plan
+    runs-on: ubuntu-latest
+    needs: [audit, validate]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: opentofu/setup-opentofu@v2
+        with:
+          cache: true
+      - name: Initialise IAC
+        run: tofu init
+      - name: Plan IAC
+        env:
+          TF_VAR_do_token: ${{ secrets.DO_TOKEN }}
+          TF_VAR_cloudflare_api_token: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          TF_VAR_cloudflare_account_id: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          TF_VAR_cloudflare_dns_zone_id: ${{ secrets.CLOUDFLARE_DNS_ZONE_ID }}
+          TF_VAR_gh_api_token: ${{ secrets.GH_API_TOKEN }}
+        run: |
+          if [ "${{ inputs.action }}" = "destroy" ]; then
+            tofu plan -destroy -out=tfplan
+          else
+            tofu plan -out=tfplan
+          fi
+      - name: Upload plan artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: tfplan
+          path: tfplan
+          retention-days: 1
+
+  apply:
+    name: IAC Apply
+    runs-on: ubuntu-latest
+    needs: [audit, validate, plan]
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - uses: opentofu/setup-opentofu@v2
+        with:
+          cache: true
+      - name: Initialise IAC
+        run: tofu init
+      - uses: actions/download-artifact@v4
+        with:
+          name: tfplan
+      - name: Apply IAC from plan
+        env:
+          TF_VAR_do_token: ${{ secrets.DO_TOKEN }}
+          TF_VAR_cloudflare_api_token: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          TF_VAR_cloudflare_account_id: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          TF_VAR_cloudflare_dns_zone_id: ${{ secrets.CLOUDFLARE_DNS_ZONE_ID }}
+          TF_VAR_gh_api_token: ${{ secrets.GH_API_TOKEN }}
+        run: tofu apply tfplan

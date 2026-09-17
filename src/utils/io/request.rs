@@ -1,6 +1,83 @@
 use std::str::FromStr;
 
 use reqwest::header::{HeaderMap, HeaderName, HeaderValue};
+use serde::{Deserialize, Deserializer};
+use thiserror::Error;
+
+/// Represents the response from a GraphQL API Call.
+///
+/// The success (data) and error (errors) fields returned
+/// are mapped to the familiar Rust Result format.
+///
+/// # Examples
+/// The below examples show a GraphQL response for a successful query
+/// and a failed query for reference.
+///
+/// ## Success
+/// ```json
+/// {
+///   "data": {
+///     "chronofile": {
+///       "name": "chronofile",
+///       "description": "A time-travelable file for Rust. ChronoFile is a drop-in for std::fs::File.",
+///       "stargazerCount": 0,
+///       "primaryLanguage": {
+///         "name": "Rust"
+///       },
+///       "languages": {
+///         "nodes": [
+///           {
+///             "name": "Rust"
+///           }
+///         ]
+///       }
+///     }
+///   }
+/// }
+/// ```
+///
+/// ## Failure
+///
+/// ```json
+/// {
+///   "errors": [
+///     {
+///       "message": "A query attribute must be specified and must be a string."
+///     }
+///   ]
+/// }
+/// ```
+#[derive(Deserialize, Debug)]
+pub enum GraphQLResult<T> {
+    #[serde(rename = "data")]
+    Ok(T),
+    #[serde(rename = "errors")]
+    Err(GraphQLError),
+}
+
+#[derive(Deserialize, Error, Debug)]
+#[serde(untagged)]
+pub enum GraphQLError {
+    #[serde(deserialize_with = "deserialize_graphql_query_errors")]
+    #[error("GraphQL query failed")]
+    Query(Vec<String>),
+}
+
+fn deserialize_graphql_query_errors<'de, D>(deserializer: D) -> Result<Vec<String>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    #[derive(Deserialize)]
+    struct GraphQLQueryErrors(Vec<GraphQLQueryError>);
+
+    #[derive(Deserialize)]
+    struct GraphQLQueryError {
+        pub message: String,
+    }
+
+    let errs = GraphQLQueryErrors::deserialize(deserializer)?;
+    Ok(errs.0.into_iter().map(|e| e.message).collect())
+}
 
 pub fn set_header(headers: &mut HeaderMap, name: &str, value: &str) -> anyhow::Result<()> {
     let value = HeaderValue::from_str(value)?;
