@@ -7,7 +7,7 @@
 Developer website built with [topcoat](https://github.com/tokio-rs/topcoat) —
 server-rendered Rust, **no WebAssembly and no client-side JavaScript**. The
 homepage showcases a curated set of GitHub projects, fetched live from the GitHub
-API and cached server-side.
+GraphQL API and cached server-side.
 
 Pages are `async fn`s annotated with `#[page]`; they `.await` the data they need
 directly, because rendering happens on the server that owns the cache. There is
@@ -35,11 +35,12 @@ topcoat dev
 ## Configuration
 
 Config is read from the environment at startup (`src/config.rs`), using the `APP_`
-prefix. Everything is optional — the app boots with none of it set.
+prefix. `APP_GITHUB_TOKEN` is required — the app fails to boot without it.
+Everything else is optional.
 
 | Variable | Effect |
 |----------|--------|
-| `APP_GITHUB_TOKEN` | Sent as `Authorization: Bearer` on GitHub API calls. Unset, requests are unauthenticated and share the 60-req/hour per-IP rate limit; a token raises that to 5000/hour. Only needs public-repo read scope. |
+| `APP_GITHUB_TOKEN` | **Required.** Sent as `Authorization: Bearer` on GitHub GraphQL API calls. GraphQL has no anonymous tier, so a token is mandatory; it draws from GitHub's points-based budget (5000 points/hour authenticated). Only needs public-repo read scope. |
 | `RUST_LOG` | `tracing-subscriber` env filter, e.g. `RUST_LOG=amackerel=debug`. Unset, defaults to `amackerel=info,warn`. |
 | `XDG_STATE_HOME` | Base directory for the rolling log files, written to `$XDG_STATE_HOME/amackerel/app.log.YYYY-MM-DD`. Unset, falls back to `$HOME/.local/state`. |
 | `HOST` / `PORT` | Bind address for the built binary; default `127.0.0.1:3000`. |
@@ -89,7 +90,8 @@ The builder installs the **musl** Tailwind CLI and points `build.rs` at it via
 `TAILWIND_CLI`, because topcoat only ever downloads the glibc build, which cannot
 run on Alpine. The runtime stage holds just the binary and `assets/` next to it —
 `AssetBundle::load()` reads `assets/manifest.toml` from the executable's own
-directory and nowhere else.
+directory and nowhere else. The runtime stage runs as an unprivileged `app` user,
+not root.
 
 ```bash
 docker build -t amackerel .
@@ -185,6 +187,47 @@ The pipeline tags `0.1.1` and publishes on success. Pull the image:
 docker pull ghcr.io/alixmacdonald10/amackerel:latest
 ```
 
+### Provisioning infrastructure
+
+`.github/workflows/infrastructure.yml` is a manual (`workflow_dispatch`) pipeline
+for applying the Terraform/OpenTofu config in `infrastructure/` from CI instead of
+a local `tofu apply`. Pick `apply` or `destroy`; `destroy` additionally requires
+typing `destroy` into `confirm_destroy` or the run fails before touching any
+infrastructure.
+
+| Stage | What it does |
+|-------|--------------|
+| **audit** | Trivy IaC scan (`scan-type: config`) over `infrastructure/`, fails on CRITICAL/HIGH |
+| **validate** | rejects a `destroy` run unless `confirm_destroy` is exactly `destroy` |
+| **plan** | gated behind the `production` GitHub environment; `tofu init` + `tofu plan` (or `plan -destroy`), uploads the plan artifact |
+| **apply** | gated behind the `production` GitHub environment; downloads the plan and runs `tofu apply` on it |
+
+Needs `DO_TOKEN`, `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`,
+`CLOUDFLARE_DNS_ZONE_ID`, `GH_API_TOKEN`, `R2_ACCESS_KEY_ID` and
+`R2_SECRET_ACCESS_KEY` set as repo or environment secrets — the first five are
+the same values you'd otherwise put in `terraform.tfvars`, and the last two are
+the R2 backend creds you'd otherwise put in `r2.backend.hcl` (see
+[Deploying](#deploying)) — plus `SSH_ALLOWED_CIDRS` and `SSH_PUBLIC_KEY` set as
+**variables** (not secrets, since neither is a credential — a CIDR range and a
+public key) on the `production` environment.
+
+> **Saving these:** repo **Settings → Secrets and variables → Actions →
+> New repository secret** for each of the seven secrets above; or, since both
+> `plan` and `apply` are gated behind the `production` environment, scope them
+> there instead via **Settings → Environments → production → Environment
+> secrets**. `SSH_ALLOWED_CIDRS` and `SSH_PUBLIC_KEY` go under **Environment
+> variables** on that same environment (`vars.SSH_ALLOWED_CIDRS` /
+> `vars.SSH_PUBLIC_KEY` in the workflow, not `secrets.*`), the former as a JSON
+> list literal, e.g. `["203.0.113.4/32"]`, the latter as the raw
+> `ssh-ed25519 AAAA... comment` content — `plan` and `apply` both
+> need `environment: production` set for either to see environment-scoped
+> secrets/variables. `GH_API_TOKEN` needs the same scope as `APP_GITHUB_TOKEN`
+> (public-repo read) — it's the value Terraform forwards to the droplet as the
+> app's own runtime token (see [Configuration](#configuration)). `R2_ACCESS_KEY_ID`
+> / `R2_SECRET_ACCESS_KEY` are mapped to `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY`
+> in the `Initialise IAC` step of each job — the S3-compatible backend reads
+> those env var names, not the secret names directly.
+
 ## Infrastructure
 
 Production runs on a single [DigitalOcean](https://www.digitalocean.com/) droplet,
@@ -200,8 +243,10 @@ special chars), and the droplet's `cloudflared --token` value comes from the
 `cloudflare_zero_trust_tunnel_cloudflared_token` data source, passed into
 cloud-init. The last ingress rule is the required catch-all (`http_status:404`).
 
-The startup script installs Docker + `cloudflared`, then runs two systemd
-services: `amackerel.service` (the app) and `watchtower.service` (auto-updater).
+The startup script installs Docker + `cloudflared`, then runs three systemd
+units: `amackerel.service` (the app), `watchtower.service` (auto-updater), and
+`cleaner-upper.timer` — runs `cleaner-upper.service` daily to delete
+`/var/log/amackerel` log files older than 30 days (see [App Logs](#app-logs)).
 
 State is stored remotely in a **Cloudflare R2 bucket** (`amackerel-iac`) via the
 S3-compatible `backend "s3"` block in `providers.tf`. R2 isn't real S3, so the backend
@@ -221,9 +266,11 @@ flowchart LR
 - The container binds **`127.0.0.1:8080` only** — port 8080 is never exposed on the
   droplet's public IP. All traffic arrives through the Cloudflare tunnel.
 - A **DigitalOcean firewall** (`amackerel-waf`) fronts the droplet: inbound allows
-  **only TCP 22 (SSH)**; all other inbound is dropped. Outbound TCP/UDP is open
-  (needed for the tunnel, image pulls, and apt). The public site is never served
-  from the droplet — 443/80 are not open inbound — so the tunnel is the only path in.
+  **only TCP 22 (SSH)**, restricted to the CIDR(s) in `var.ssh_allowed_cidrs`; all
+  other inbound is dropped. Outbound is restricted to TCP 443/80 and TCP+UDP 53
+  (needed for the tunnel, image pulls, apt, and DNS). The public site is never
+  served from the droplet — 443/80 are not open inbound — so the tunnel is the
+  only path in.
 - Cloudflare terminates TLS at its edge (443) and forwards to `localhost:8080`.
   The ingress rule (`amackerel.dev` → `http://localhost:8080`) is defined in
   `cloudflare.tf` (`cloudflare_zero_trust_tunnel_cloudflared_config`), and a
@@ -242,7 +289,8 @@ flowchart LR
 1. A DigitalOcean API token, **scoped** with read/write on: `droplet`, `ssh_key`,
    `tag`, `project` and `firewall`. Anything narrower and `tofu apply` fails to manage those
    resources.
-2. An SSH key at `~/.ssh/id_ed25519_do_amackerel.pub` (path in `do.tf`).
+2. An SSH keypair for droplet access, with the public key set as
+   `var.ssh_public_key` (see below).
 3. A Cloudflare **API token** (dashboard → My Profile → API Tokens). Terraform
    creates the tunnel, its config, and the DNS record, so the token needs both
    zone and account permissions. The token in use is scoped:
@@ -261,8 +309,17 @@ flowchart LR
    **R2 API token** (Cloudflare dashboard → R2 → Manage API Tokens) — gives the
    Access Key ID / Secret Access Key used by the backend. (The R2 Storage scopes
    above cover this if you reuse the same token.)
+6. A GitHub **personal access token** with public-repo read scope, for the app's
+   own `APP_GITHUB_TOKEN` (see [Configuration](#configuration)) — required, since
+   GitHub's GraphQL API has no anonymous tier.
 
 ### Deploying
+
+> **Deploying:** production changes go through the `infrastructure.yml` pipeline
+> (Actions → Run workflow → `apply`/`destroy`), gated behind the `production`
+> environment — never run `tofu apply` against production state from a laptop.
+> The steps below are for local `plan`s / testing the config, and to know which
+> secrets the pipeline needs.
 
 Create `infrastructure/terraform.tfvars` (gitignored — never commit it):
 
@@ -271,8 +328,25 @@ do_token               = "dop_v1_..."
 cloudflare_api_token   = "cfat_..."
 cloudflare_account_id  = "<cloudflare-account-id>"
 cloudflare_dns_zone_id = "<amackerel.dev-zone-id>"
+gh_api_token           = "ghp_..."
+ssh_allowed_cidrs      = ["203.0.113.4/32"]
+ssh_public_key         = "ssh-ed25519 AAAA... you@host"
 # image = "ghcr.io/alixmacdonald10/amackerel:latest"  # optional override
 ```
+
+`ssh_allowed_cidrs` is the only source IP range(s) the firewall lets in on port 22
+— set it to your own admin IP(s), not `0.0.0.0/0`. On a dynamic (residential) IP,
+this value goes stale whenever your ISP reassigns it, silently locking you out of
+SSH — update the var and re-apply (or update the `SSH_ALLOWED_CIDRS` environment
+variable and re-run the `infrastructure.yml` pipeline) each time your IP changes.
+
+`ssh_public_key` is baked into the droplet's `digitalocean_ssh_key` resource,
+granting that key access. In CI it comes from the `SSH_PUBLIC_KEY` environment
+variable instead (see above).
+
+`gh_api_token` is passed to the droplet as the app's own `APP_GITHUB_TOKEN` (see
+[Configuration](#configuration)) — a GitHub token with public-repo read scope, not
+a Terraform/Cloudflare credential.
 
 The tunnel connector token is **not** a variable — Terraform generates the tunnel
 secret and derives the token itself, so cloud-init gets it automatically.
