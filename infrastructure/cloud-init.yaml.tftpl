@@ -32,6 +32,7 @@ write_files:
         -v /var/log/amackerel:/var/lib/amackerel/state \
         -e XDG_STATE_HOME=/var/lib/amackerel/state \
         -e RUST_LOG=amackerel=info,warn \
+        -e APP_GITHUB_TOKEN=${github_api_token} \
         ${image}
       ExecStop=/usr/bin/docker stop amackerel
 
@@ -110,6 +111,7 @@ runcmd:
   - systemctl daemon-reload
   - systemctl enable --now amackerel.service
   - systemctl enable --now watchtower.service
+  - systemctl enable --now cleaner-upper.timer
 
   # Cloudflare tunnel (edge 443 -> http://localhost:8080 via dashboard ingress)
   - cloudflared service install ${cf_tunnel_token}

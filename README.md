@@ -53,7 +53,7 @@ Stable Rust (pinned in `rust-toolchain.toml`) and the topcoat CLI. No nightly, n
 `wasm32` target, no npm, no dart-sass — `build.rs` downloads and caches the
 standalone Tailwind CLI itself.
 
-1. `cargo install topcoat-cli --locked`
+1. `cargo install topcoat-cli@^0.6 --locked`
 2. `npm install` in the `end2end` directory before running tests
 
 ## Testing

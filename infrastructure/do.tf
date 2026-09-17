@@ -4,13 +4,13 @@ resource "digitalocean_project" "amackerel" {
   purpose     = "Web Application"
   environment = "Production"
   resources = [
-    "${digitalocean_droplet.amackerel.urn}"
+    digitalocean_droplet.amackerel.urn
   ]
 }
 
 resource "digitalocean_ssh_key" "amackerel" {
   name       = "${local.project_name}-prod"
-  public_key = file("/home/utsar/.ssh/id_ed25519_do_amackerel.pub")
+  public_key = var.ssh_public_key
 }
 
 resource "digitalocean_droplet" "amackerel" {
@@ -25,32 +25,58 @@ resource "digitalocean_droplet" "amackerel" {
   tags       = [local.project_name, "prod"]
 
   user_data = templatefile("${path.module}/cloud-init.yaml.tftpl", {
-    image           = var.image
-    cf_tunnel_token = data.cloudflare_zero_trust_tunnel_cloudflared_token.amackerel.token
+    image            = var.image
+    cf_tunnel_token  = data.cloudflare_zero_trust_tunnel_cloudflared_token.amackerel.token
+    github_api_token = var.gh_api_token
   })
 }
 
+#trivy:ignore:DIG-0003 -- outbound-only: HTTP/HTTPS/DNS/cloudflared tunnel egress requires unrestricted destination IPs (Cloudflare edge + arbitrary DNS resolvers aren't pinnable to a fixed CIDR)
 resource "digitalocean_firewall" "amackerel" {
   name        = "${local.project_name}-waf"
   droplet_ids = [digitalocean_droplet.amackerel.id]
   tags        = [local.project_name, "prod"]
-  # ssh inbound
+
   inbound_rule {
     protocol         = "tcp"
     port_range       = "22"
-    source_addresses = ["0.0.0.0/0", "::/0"]
+    source_addresses = var.ssh_allowed_cidrs
   }
 
-  # all tcp or udp outbound
   outbound_rule {
     protocol              = "tcp"
-    port_range            = "1-65535"
-    destination_addresses = ["0.0.0.0/0", "::/0"]
+    port_range            = "80"
+    destination_addresses = ["0.0.0.0/0"]
+  }
+
+  outbound_rule {
+    protocol              = "tcp"
+    port_range            = "443"
+    destination_addresses = ["0.0.0.0/0"]
+  }
+
+  outbound_rule {
+    protocol              = "tcp"
+    port_range            = "53"
+    destination_addresses = ["0.0.0.0/0"]
   }
 
   outbound_rule {
     protocol              = "udp"
-    port_range            = "1-65535"
-    destination_addresses = ["0.0.0.0/0", "::/0"]
+    port_range            = "53"
+    destination_addresses = ["0.0.0.0/0"]
   }
+
+  outbound_rule {
+    protocol              = "tcp"
+    port_range            = "7844"
+    destination_addresses = ["0.0.0.0/0"]
+  }
+
+  outbound_rule {
+    protocol              = "udp"
+    port_range            = "7844"
+    destination_addresses = ["0.0.0.0/0"]
+  }
+
 }

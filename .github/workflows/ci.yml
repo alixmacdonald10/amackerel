@@ -75,7 +75,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       # The asset bundler scans the compiled binary, so it ships as a CLI.
       - name: Install topcoat CLI
-        run: cargo install topcoat-cli --locked
+        run: cargo install topcoat-cli@^0.6 --locked
       - uses: actions/setup-node@v4
         with:
           node-version: 20
@@ -93,6 +93,8 @@ jobs:
           cargo build
           topcoat asset bundle
       - name: Start app on :3000
+        env:
+          APP_GITHUB_TOKEN: ${{ secrets.GH_API_TOKEN }}
         run: |
           ./target/debug/amackerel &
           for i in $(seq 1 60); do
@@ -125,7 +127,7 @@ jobs:
         run: docker build -t app:ci .
 
       - name: Start container
-        run: docker run -d --name app -p 8080:8080 app:ci
+        run: docker run -d --name app -p 8080:8080 -e APP_GITHUB_TOKEN=${{ secrets.GH_API_TOKEN }} app:ci
 
       - name: Wait for app to be ready
         run: |

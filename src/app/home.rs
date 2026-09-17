@@ -1,7 +1,12 @@
-use std::sync::Arc;
+use std::{collections::BTreeMap, sync::Arc};
 
 use topcoat::{
-    Result, context::{Cx, app_context}, icon::{icon, iconify::iconify_icon}, router::page, runtime::shard, view::{StaticClass, attributes, class, view},
+    context::{app_context, Cx},
+    icon::{icon, iconify::iconify_icon},
+    router::page,
+    runtime::shard,
+    view::{attributes, class, view, StaticClass},
+    Result,
 };
 
 use crate::{
@@ -17,7 +22,7 @@ use crate::{
     utils::io::github::CURATED_REPOS,
 };
 
-const LANGUAGES_CSS: StaticClass = class!{
+const LANGUAGES_CSS: StaticClass = class! {
     "rounded-xl",
     "px-2",
     "py-1",
@@ -64,8 +69,8 @@ async fn project_results(cx: &Cx, reload: bool) -> Result {
     // TODO: a better way to impl this caching
     let cache = app_context::<Arc<TTLCache>>(cx);
     let key = generate_cache_key("load_projects", CURATED_REPOS.join(":").as_str());
-    let projects = if let Some(value) = cache.get::<Vec<RepositoryMeta>>(&key) {
-        Ok(value.to_vec())
+    let projects = if let Some(value) = cache.get::<BTreeMap<String, RepositoryMeta>>(&key) {
+        Ok((*value).clone())
     } else {
         let client = app_context::<reqwest::Client>(cx);
         let app_config = app_context::<AppConfig>(cx);
@@ -73,16 +78,16 @@ async fn project_results(cx: &Cx, reload: bool) -> Result {
     };
 
     match projects {
-        Ok(list) if list.is_empty() => view! { empty() },
-        Ok(list) => {
+        Ok(map) if map.is_empty() => view! { empty() },
+        Ok(map) => {
             let elapsed = now.elapsed();
             tracing::info!("Func call time elapsed: {elapsed:#?}");
 
             // TODO: This is silly and always updates the cache
-            let _ = cache.insert(&key, list.clone());
+            let _ = cache.insert(&key, map.clone());
 
             view! { <ul>
-                for RepositoryMeta { name, description, languages, stars, url, .. } in list {
+                for (_repo, RepositoryMeta { name, description, primary_language, languages, stars, url, .. }) in map {
                     <li>
                         <a href=(url) target="_blank" rel="noopener">
                         card(
@@ -107,16 +112,19 @@ async fn project_results(cx: &Cx, reload: bool) -> Result {
                                      (description)
                                  )
                              )
-                             if languages.is_some() {
-                                 card_footer(
-                                     attrs: attributes! { class="flex-wrap justify-center gap-2" },
-                                     for language in &languages.unwrap_or(vec![]) {
+                             card_footer(
+                                 attrs: attributes! { class="flex-wrap justify-center gap-2" },
+                                <span class=(LANGUAGES_CSS)>
+                                    (&primary_language)
+                                </span>
+                                for language in &languages {
+                                    if language != &primary_language {
                                          <span class=(LANGUAGES_CSS)>
                                              (language.as_str())
                                          </span>
-                                     }
-                                 )
-                             }
+                                    }
+                                }
+                            )
                         )
                         </a>
                     </li>

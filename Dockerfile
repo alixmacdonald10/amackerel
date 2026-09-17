@@ -13,15 +13,11 @@ RUN curl -fsSLo /usr/local/bin/tailwindcss \
     tailwindcss --help >/dev/null
 ENV TAILWIND_CLI=/usr/local/bin/tailwindcss
 
-# The bundler scans the compiled binary for asset declarations, so it ships as
-# the `topcoat` CLI rather than a library call.
-RUN cargo install topcoat-cli --locked
+RUN cargo install topcoat-cli@^0.6 --locked
 
 WORKDIR /work
 COPY . .
 
-# The asset bundle is per-profile (asset IDs embed $OUT_DIR), so it must be
-# bundled with the same `--release` build that gets copied into the runtime.
 RUN cargo build --release && \
     topcoat asset bundle --release
 
@@ -29,18 +25,21 @@ FROM alpine:3.21 AS runner
 
 RUN apk add --no-cache libgcc
 
-# topcoat reads both: HOST defaults to 127.0.0.1 and PORT to 3000, neither of
-# which is reachable from outside the container.
+RUN addgroup -S app && adduser -S app -G app
+
 ENV HOST="0.0.0.0"
 ENV PORT="8080"
 
 WORKDIR /app
 
-COPY --from=builder /work/target/release/amackerel /app/
-# `AssetBundle::load()` reads `assets/manifest.toml` in the executable's own
-# directory and nowhere else, so the bundle sits next to the binary.
-COPY --from=builder /work/target/release/assets /app/assets
+COPY --from=builder --chown=app:app /work/target/release/amackerel /app/
+COPY --from=builder --chown=app:app /work/target/release/assets /app/assets
+
+USER app
 
 EXPOSE 8080
+
+HEALTHCHECK --interval=5m --timeout=3s \
+  CMD wget --no-verbose --tries=1 --spider http://localhost:8080/ || exit 1
 
 ENTRYPOINT ["/app/amackerel"]

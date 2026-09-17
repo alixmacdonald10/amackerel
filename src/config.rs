@@ -4,7 +4,7 @@ use serde::Deserialize;
 
 #[derive(Debug, Deserialize)]
 pub struct AppConfig {
-    pub github_token: Option<SecretString>,
+    pub github_token: SecretString,
 }
 
 impl AppConfig {

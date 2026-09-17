@@ -16,8 +16,7 @@ pub const GITHUB_API_URL: &str = "https://api.github.com";
 /// Thread safe, lazy initialisation of a minimum viable [HeaderMap] for Github requests
 pub static GITHUB_MIN_HEADERS: LazyLock<HeaderMap<HeaderValue>> = LazyLock::new(|| {
     let mut headers = HeaderMap::new();
-    headers.insert(ACCEPT, "application/vnd.github+json".parse().unwrap());
-    headers.insert("X-GitHub-Api-Version", "2026-03-10".parse().unwrap());
+    headers.insert(ACCEPT, "application/json".parse().unwrap());
     headers.insert(USER_AGENT, env!("CARGO_PKG_NAME").parse().unwrap());
     headers
 });
@@ -28,12 +27,12 @@ pub static GITHUB_URL: LazyLock<String> =
 pub fn compile_github_headers(config: &AppConfig) -> anyhow::Result<HeaderMap<HeaderValue>> {
     let mut map = GITHUB_MIN_HEADERS.clone();
 
-    if let Some(ref token) = config.github_token {
-        map.insert(
-            AUTHORIZATION,
-            format!("Bearer {}", token.expose_secret()).parse()?,
-        );
-    }
+    let token = &config.github_token;
+    map.insert(
+        AUTHORIZATION,
+        format!("Bearer {}", token.expose_secret()).parse()?,
+    );
+
     tracing::debug!("{map:#?}");
     Ok(map)
 }
