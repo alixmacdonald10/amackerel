@@ -160,4 +160,36 @@ mod tests {
         assert_eq!(headers["content-type"], "text/html");
         assert_eq!(headers.len(), 1);
     }
+
+    #[test]
+    fn graphql_result_deserializes_a_successful_response() {
+        let json = serde_json::json!({ "data": { "name": "chronofile" } });
+
+        let result: GraphQLResult<serde_json::Value> =
+            serde_json::from_value(json).expect("should deserialize");
+
+        assert!(matches!(result, GraphQLResult::Ok(_)));
+    }
+
+    #[test]
+    fn graphql_result_deserializes_a_query_error_response() {
+        let json = serde_json::json!({
+            "errors": [
+                { "message": "A query attribute must be specified and must be a string." }
+            ]
+        });
+
+        let result: GraphQLResult<serde_json::Value> =
+            serde_json::from_value(json).expect("should deserialize");
+
+        match result {
+            GraphQLResult::Err(GraphQLError::Query(messages)) => {
+                assert_eq!(
+                    messages,
+                    vec!["A query attribute must be specified and must be a string."]
+                );
+            }
+            other => panic!("expected a query error, got {other:?}"),
+        }
+    }
 }

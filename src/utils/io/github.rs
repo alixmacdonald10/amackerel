@@ -47,18 +47,17 @@ mod tests {
 
     fn config_with_token(token: &str) -> AppConfig {
         AppConfig {
-            github_token: Some(SecretString::from(token)),
+            github_token: SecretString::from(token),
         }
     }
 
     fn assert_carries_min_headers(headers: &HeaderMap<HeaderValue>) {
-        assert_eq!(headers[ACCEPT], "application/vnd.github+json");
-        assert_eq!(headers["X-GitHub-Api-Version"], "2026-03-10");
+        assert_eq!(headers[ACCEPT], "application/json");
         assert_eq!(headers[USER_AGENT], env!("CARGO_PKG_NAME"));
     }
 
     #[test]
-    fn min_headers_carry_accept_api_version_and_user_agent() {
+    fn min_headers_carry_accept_and_user_agent() {
         assert_carries_min_headers(&GITHUB_MIN_HEADERS);
         assert!(!GITHUB_MIN_HEADERS.contains_key(AUTHORIZATION));
     }
@@ -73,23 +72,11 @@ mod tests {
     }
 
     #[test]
-    fn compile_headers_omits_authorization_when_no_token_is_present() {
-        let config = AppConfig { github_token: None };
-
-        let headers = compile_github_headers(&config).expect("headers should compile");
-
-        assert!(!headers.contains_key(AUTHORIZATION));
-    }
-
-    #[test]
     fn compile_headers_preserves_the_minimum_headers() {
-        let with_token =
+        let headers =
             compile_github_headers(&config_with_token("ghp_test")).expect("headers should compile");
-        let without_token = compile_github_headers(&AppConfig { github_token: None })
-            .expect("headers should compile");
 
-        assert_carries_min_headers(&with_token);
-        assert_carries_min_headers(&without_token);
+        assert_carries_min_headers(&headers);
     }
 
     #[test]
