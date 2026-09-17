@@ -28,12 +28,19 @@ mod tests {
     /// cannot change the outcome. `temp_env` serialises the closures against each
     /// other and restores the environment afterwards.
     fn load_with(app_github_token: Option<&str>, github_token: Option<&str>) -> AppConfig {
+        try_load_with(app_github_token, github_token).expect("config should load")
+    }
+
+    fn try_load_with(
+        app_github_token: Option<&str>,
+        github_token: Option<&str>,
+    ) -> anyhow::Result<AppConfig> {
         temp_env::with_vars(
             [
                 ("APP_GITHUB_TOKEN", app_github_token),
                 ("GITHUB_TOKEN", github_token),
             ],
-            || AppConfig::load().expect("config should load"),
+            AppConfig::load,
         )
     }
 
@@ -41,29 +48,27 @@ mod tests {
     fn load_reads_the_token_from_app_github_token() {
         let config = load_with(Some("ghp_test"), None);
 
-        let token = config.github_token.expect("token should be set");
-        assert_eq!(token.expose_secret(), "ghp_test");
+        assert_eq!(config.github_token.expose_secret(), "ghp_test");
     }
 
     #[test]
-    fn load_yields_no_token_when_the_environment_is_empty() {
-        let config = load_with(None, None);
+    fn load_errors_when_the_environment_is_empty() {
+        let result = try_load_with(None, None);
 
-        assert!(config.github_token.is_none());
+        assert!(result.is_err());
     }
 
     #[test]
-    fn load_ignores_github_token_without_the_app_prefix() {
-        let config = load_with(None, Some("ghp_unprefixed"));
+    fn load_errors_when_only_the_unprefixed_token_is_set() {
+        let result = try_load_with(None, Some("ghp_unprefixed"));
 
-        assert!(config.github_token.is_none());
+        assert!(result.is_err());
     }
 
     #[test]
     fn load_prefers_the_prefixed_token_over_the_unprefixed_one() {
         let config = load_with(Some("ghp_prefixed"), Some("ghp_unprefixed"));
 
-        let token = config.github_token.expect("token should be set");
-        assert_eq!(token.expose_secret(), "ghp_prefixed");
+        assert_eq!(config.github_token.expose_secret(), "ghp_prefixed");
     }
 }
