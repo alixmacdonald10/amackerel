@@ -19,7 +19,7 @@ pub async fn header() -> Result {
             class=(class!("w-full", "flex", "flex-col", "items-center", "px-5", "py-4", "gap-2", "mb-8"))
         >
             <a href="/" class=(class!("mb-4"))>
-                <img src=(LOGO) alt="A Macdonald" class=(class!("w-full", LOGO_WIDTH))>
+                <img src=(LOGO) alt="A Macdonald" width="1185" height="416" class=(class!("w-full", LOGO_WIDTH))>
             </a>
             <p class=(class!("text-sm", "text-muted-foreground"))>
                 "Hooked on keeping it simple"

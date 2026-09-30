@@ -36,7 +36,7 @@
    `border-border`, ...). The indirection through plain variables on `:root`
    and `.dark` is what lets the values swap when the color scheme changes. */
 @theme inline {
-  --font-mono: "Geist mono", mono;
+  --font-mono: "Geist mono", monospace;
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-muted-foreground: var(--muted-foreground);
@@ -102,6 +102,6 @@
     }
 }
 
-.transition-marker {
+[data-marker="transition-marker"] {
   view-transition-name: diff;
 }

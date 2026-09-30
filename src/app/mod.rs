@@ -75,10 +75,11 @@ async fn root_layout(cx: &Cx, slot: Result) -> Result {
                 topcoat::dev::script()
                 topcoat::font::link(font: fontsource_font!(GEIST_MONO))
                 <link rel="stylesheet" href=(tailwind::stylesheet!())>
+                <link rel="expect" href="#main" blocking="render">
             </head>
             <body class=(class!(MAX_WIDTH, "w-full", "mx-auto", "flex", "flex-col", "items-center", "text-center"))>
                 header()
-                <main class=(class!("flex", "flex-col", "items-center"))>
+                <main id="main" class=(class!("flex", "flex-col", "items-center")) data-marker="transition-marker">
                     (content)
                 </main>
                 footer()

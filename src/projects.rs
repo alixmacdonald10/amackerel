@@ -130,7 +130,10 @@ mod tests {
 
         assert_eq!(repo.name, "chronofile");
         assert_eq!(repo.primary_language, "Rust");
-        assert_eq!(repo.languages, vec!["Rust".to_string(), "Shell".to_string()]);
+        assert_eq!(
+            repo.languages,
+            vec!["Rust".to_string(), "Shell".to_string()]
+        );
         assert_eq!(repo.stars, 3);
     }
 

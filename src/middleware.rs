@@ -1,10 +1,13 @@
 use reqwest::header::HeaderMap;
 use topcoat::{
     context::Cx,
-    router::{Body, LayerFuture, Next},
+    router::{request::uri, Body, LayerFuture, Next},
 };
 
 use crate::utils::io::request::set_header;
+
+const HASHED_ASSET_PREFIX: &str = "/_topcoat/assets/";
+const IMMUTABLE_CACHE_CONTROL: &str = "public, max-age=31536000, immutable";
 
 const DEFAULT_HEADERS: &[(&str, &str)] = &[
     ("x-frame-options", "DENY"),
@@ -104,6 +107,11 @@ pub fn security_headers<'a>(cx: &'a Cx, body: Body, next: Next<'a>) -> LayerFutu
             Some(origin) => ResponseHeaders::Dev { origin },
         }
         .compile(headers)?;
+
+        // cache the assets to prevent flicker under view transitions
+        if uri(cx).path().starts_with(HASHED_ASSET_PREFIX) {
+            set_header(headers, "cache-control", IMMUTABLE_CACHE_CONTROL)?;
+        }
 
         Ok(response)
     })

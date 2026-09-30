@@ -49,7 +49,7 @@ async fn home() -> Result {
     view! {
         signal toggle_project_reload = true;
 
-        <p class=(PARAGRAPH_CSS) data-marker="transition-marker">
+        <p class=(PARAGRAPH_CSS)>
             "Trawl through the shoal of projects I've been tinkering with "
             "or learn more "
             <a class=(INLINE_NAV_LINK_CSS) href="/about">"about me"</a>
