@@ -25,6 +25,7 @@ async fn main() -> anyhow::Result<()> {
     tracing::debug!("{app_config:#?}");
     let ttl_cache = TTLCache::new();
 
+    // TODO: add a tracing middleware
     let router = Router::builder()
         .discover()
         .app_context(http_client)
