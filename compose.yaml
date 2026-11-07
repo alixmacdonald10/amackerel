@@ -1,0 +1,18 @@
+services:
+  # healthcheck is inherited from the Dockerfile
+  amackerel:
+    image: ${APP_IMAGE}
+    ports:
+      - "8080:8080"
+    volumes:
+      - /var/log/amackerel:/var/log/amackerel/state
+    environment:
+      - XDG_STATE_HOME=/var/lib/amackerel/state
+      - RUST_LOG=amackerel=info,warn
+      - APP_GITHUB_TOKEN=${GITHUB_API_TOKEN}
+
+  watchtower:
+    image: nickfedor/watchtower
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    command: ["watchtower", "--interval", "300", "--cleanup", "amackerel"]

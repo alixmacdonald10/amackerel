@@ -1,7 +1,8 @@
 #cloud-config
 # Startup script for the amackerel prod droplet.
-# - installs Docker + cloudflared
-# - runs the latest amackerel image bound to 127.0.0.1:8080 (not exposed publicly)
+# - installs Docker, Docker Compose + cloudflared
+# - saves the existing docker compose.yaml to the vm
+# - runs docker compose up to run the application locally at localhost:8080
 # - installs the Cloudflare tunnel as a service (ingress hostname -> http://localhost:8080
 #   is configured dashboard-side on the named tunnel)
 
@@ -9,54 +10,40 @@ package_update: true
 package_upgrade: true
 
 write_files:
-  # systemd unit that (re)pulls the latest image and runs it. Keeping this as a
-  # unit means `systemctl restart amackerel` redeploys the newest :latest.
-  - path: /etc/systemd/system/amackerel.service
+  # write docker compose file
+  - path: /opt/amackerel/compose.yaml
+    owner: root:root
+    permissions: "0644"
+    content: |
+      ${indent(6, COMPOSE_CONTENT)}
+
+  # write .env 
+  - path: /opt/amackerel/.env
+    owner: root:root
+    permissions: "0644"
+    content: |
+      APP_IMAGE=${APP_IMAGE}
+      GITHUB_API_TOKEN=${GITHUB_API_TOKEN}
+
+  # systemd unit that runs docker compose.
+  - path: /etc/systemd/system/app.service
     permissions: "0644"
     content: |
       [Unit]
-      Description=amackerel web app
+      Description=amackerel docker compose 
       Requires=docker.service
       After=docker.service network-online.target
       Wants=network-online.target
 
       [Service]
-      Restart=always
+      Type=oneshot
+      RemainAfterExit=yes
       RestartSec=5
       TimeoutStartSec=300
-      ExecStartPre=-/usr/bin/docker rm -f amackerel
-      ExecStartPre=/usr/bin/docker pull ${image}
+      WorkingDirectory=/opt/amackerel
       ExecStartPre=/usr/bin/mkdir -p /var/log/amackerel
-      ExecStart=/usr/bin/docker run --rm --name amackerel \
-        -p 127.0.0.1:8080:8080 \
-        -v /var/log/amackerel:/var/lib/amackerel/state \
-        -e XDG_STATE_HOME=/var/lib/amackerel/state \
-        -e RUST_LOG=amackerel=info,warn \
-        -e APP_GITHUB_TOKEN=${github_api_token} \
-        ${image}
-      ExecStop=/usr/bin/docker stop amackerel
-
-      [Install]
-      WantedBy=multi-user.target
-
-  # Watchtower: polls the registry and recreates the amackerel container only
-  # when the :latest digest actually changes (--cleanup prunes the old image).
-  - path: /etc/systemd/system/watchtower.service
-    permissions: "0644"
-    content: |
-      [Unit]
-      Description=watchtower auto-updater for amackerel
-      Requires=docker.service
-      After=docker.service amackerel.service
-
-      [Service]
-      Restart=always
-      RestartSec=5
-      ExecStartPre=-/usr/bin/docker rm -f watchtower
-      ExecStart=/usr/bin/docker run --rm --name watchtower \
-        -v /var/run/docker.sock:/var/run/docker.sock \
-        nickfedor/watchtower --interval 300 --cleanup amackerel
-      ExecStop=/usr/bin/docker stop watchtower
+      ExecStart=/usr/bin/docker compose up -d
+      ExecStop=/usr/bin/docker compose down
 
       [Install]
       WantedBy=multi-user.target
@@ -104,14 +91,14 @@ runcmd:
   - curl -fsSL https://pkg.cloudflare.com/cloudflare-main.gpg -o /usr/share/keyrings/cloudflare-main.gpg
   - echo "deb [signed-by=/usr/share/keyrings/cloudflare-main.gpg] https://pkg.cloudflare.com/cloudflared any main" > /etc/apt/sources.list.d/cloudflared.list
 
+  # installs
   - apt-get update
-  - DEBIAN_FRONTEND=noninteractive apt-get install -y docker-ce docker-ce-cli containerd.io cloudflared
+  - DEBIAN_FRONTEND=noninteractive apt-get install -y docker-ce docker-ce-cli docker-compose-plugin containerd.io cloudflared
 
-  # amackerel app on 127.0.0.1:8080 + watchtower auto-updater
+  # run the application
   - systemctl daemon-reload
-  - systemctl enable --now amackerel.service
-  - systemctl enable --now watchtower.service
+  - systemctl enable --now app.service
   - systemctl enable --now cleaner-upper.timer
 
   # Cloudflare tunnel (edge 443 -> http://localhost:8080 via dashboard ingress)
-  - cloudflared service install ${cf_tunnel_token}
+  - cloudflared service install ${CF_TUNNEL_TOKEN}

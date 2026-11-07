@@ -395,14 +395,13 @@ cloud-init status --long
 tail -n 50 /var/log/cloud-init-output.log      # full boot-time output
 
 # App: service up, container running, responding on localhost:8080?
-systemctl status amackerel --no-pager
+systemctl status app --no-pager
 docker ps -a                                   # STATUS should be "Up"
-docker logs amackerel --tail 50
+docker logs amackerel-amackerel-1 --tail 50
 curl -sS -o /dev/null -w "%{http_code}\n" http://localhost:8080   # expect 200
 
-# Auto-updater
-systemctl status watchtower --no-pager
-journalctl -u watchtower --no-pager -n 50
+# watchtower auto updater
+docker logs amackerel-watchtower-1 --tail 50
 
 # Tunnel: connected to Cloudflare edge?
 systemctl status cloudflared --no-pager
