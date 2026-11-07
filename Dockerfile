@@ -23,7 +23,7 @@ RUN cargo build --release && \
 
 FROM alpine:3.21 AS runner
 
-RUN apk add --no-cache libgcc
+RUN apk add --no-cache libgcc curl
 
 ENV HOST="0.0.0.0"
 ENV PORT="8080"
@@ -36,6 +36,6 @@ COPY --from=builder /work/target/release/assets /app/assets
 EXPOSE 8080
 
 HEALTHCHECK --interval=5m --timeout=3s \
-  CMD wget --no-verbose --tries=1 --spider http://localhost:8080/ || exit 1
+  CMD curl -f http://localhost:8080/healthz || exit 1
 
 ENTRYPOINT ["/app/amackerel"]
