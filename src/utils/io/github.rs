@@ -1,15 +1,13 @@
 use std::sync::LazyLock;
 
 use reqwest::header::{HeaderMap, HeaderValue, ACCEPT, AUTHORIZATION, USER_AGENT};
-use secrecy::ExposeSecret;
-
-use crate::config::AppConfig;
+use secrecy::{ExposeSecret, SecretString};
 
 pub const GITHUB_USERNAME: &str = "alixmacdonald10";
 
 /// Hand-picked repos to show off, as bare repo names owned by [GITHUB_USERNAME].
 /// Edit this list (and rebuild) to change which projects appear.
-pub const CURATED_REPOS: &[&str] = &["amackerel", "chronofile"];
+pub const CURATED_REPOS: &[&str] = &["amackerel", "chronofile", "finops"];
 
 pub const GITHUB_API_URL: &str = "https://api.github.com";
 
@@ -24,16 +22,14 @@ pub static GITHUB_MIN_HEADERS: LazyLock<HeaderMap<HeaderValue>> = LazyLock::new(
 pub static GITHUB_URL: LazyLock<String> =
     LazyLock::new(|| format!("https://github.com/{GITHUB_USERNAME}"));
 
-pub fn compile_github_headers(config: &AppConfig) -> anyhow::Result<HeaderMap<HeaderValue>> {
+pub fn compile_github_headers(token: &SecretString) -> anyhow::Result<HeaderMap<HeaderValue>> {
     let mut map = GITHUB_MIN_HEADERS.clone();
 
-    let token = &config.github_token;
-    map.insert(
-        AUTHORIZATION,
-        format!("Bearer {}", token.expose_secret()).parse()?,
-    );
+    let mut auth_header =
+        HeaderValue::from_bytes(format!("Bearer {}", token.expose_secret()).as_bytes())?;
+    auth_header.set_sensitive(true);
+    map.insert(AUTHORIZATION, auth_header);
 
-    tracing::debug!("{map:#?}");
     Ok(map)
 }
 
@@ -43,12 +39,8 @@ mod tests {
 
     use std::collections::HashSet;
 
-    use secrecy::SecretString;
-
-    fn config_with_token(token: &str) -> AppConfig {
-        AppConfig {
-            github_token: SecretString::from(token),
-        }
+    fn token(value: &str) -> SecretString {
+        SecretString::from(value)
     }
 
     fn assert_carries_min_headers(headers: &HeaderMap<HeaderValue>) {
@@ -64,25 +56,29 @@ mod tests {
 
     #[test]
     fn compile_headers_adds_authorization_when_a_token_is_present() {
-        let config = config_with_token("ghp_test");
-
-        let headers = compile_github_headers(&config).expect("headers should compile");
+        let headers = compile_github_headers(&token("ghp_test")).expect("headers should compile");
 
         assert_eq!(headers[AUTHORIZATION], "Bearer ghp_test");
     }
 
     #[test]
+    fn compile_headers_marks_authorization_as_sensitive() {
+        let headers = compile_github_headers(&token("ghp_test")).expect("headers should compile");
+
+        // Sensitive values are redacted from `Debug` output, keeping the token out of logs.
+        assert!(headers[AUTHORIZATION].is_sensitive());
+    }
+
+    #[test]
     fn compile_headers_preserves_the_minimum_headers() {
-        let headers =
-            compile_github_headers(&config_with_token("ghp_test")).expect("headers should compile");
+        let headers = compile_github_headers(&token("ghp_test")).expect("headers should compile");
 
         assert_carries_min_headers(&headers);
     }
 
     #[test]
     fn compile_headers_does_not_mutate_the_shared_static() {
-        let _ =
-            compile_github_headers(&config_with_token("ghp_test")).expect("headers should compile");
+        let _ = compile_github_headers(&token("ghp_test")).expect("headers should compile");
 
         // The static is process-wide; a missing clone would leak the token into it.
         assert!(!GITHUB_MIN_HEADERS.contains_key(AUTHORIZATION));
@@ -90,9 +86,7 @@ mod tests {
 
     #[test]
     fn compile_headers_errors_on_a_token_with_invalid_header_bytes() {
-        let config = config_with_token("bad\ntoken");
-
-        assert!(compile_github_headers(&config).is_err());
+        assert!(compile_github_headers(&token("bad\ntoken")).is_err());
     }
 
     #[test]
