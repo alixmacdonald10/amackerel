@@ -32,7 +32,6 @@ pub async fn cache_repos(
     command.arg("EX");
     command.arg(REPO_CACHE_TTL.as_secs());
 
-    tracing::debug!("{command:#?}");
     let res = command.query_async::<()>(&mut cache_connection).await;
     match res {
         Ok(_) => {

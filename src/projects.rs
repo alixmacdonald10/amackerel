@@ -72,10 +72,14 @@ impl From<ResponseData> for Vec<RepositoryMeta> {
 
 pub async fn fetch_repositories(
     app_config: &AppConfig,
-    cache_connection: &MultiplexedConnection,
+    cache_connection: &Option<MultiplexedConnection>,
     reqwest_client: &reqwest::Client,
 ) -> Result<Vec<RepositoryMeta>> {
-    let mut repositories = get_cached_repos(cache_connection).await?;
+    let mut repositories = if let Some(cache_connection) = cache_connection {
+        get_cached_repos(cache_connection).await?
+    } else {
+        vec![]
+    };
     let missing = if repositories.is_empty() {
         // All repos are missing from cache
         CURATED_REPOS.to_vec()
@@ -97,7 +101,9 @@ pub async fn fetch_repositories(
     if !missing.is_empty() {
         let mut fetched = load_projects(app_config, reqwest_client, &missing).await?;
         // cache in separate thread so as not to block
-        tokio::task::spawn(cache_repos(cache_connection.clone(), fetched.clone()));
+        if let Some(cache_connection) = cache_connection {
+            tokio::task::spawn(cache_repos(cache_connection.clone(), fetched.clone()));
+        }
         repositories.append(&mut fetched);
     }
     repositories.sort_by_key(|repo| repo.name.clone());

@@ -7,7 +7,9 @@ mod middleware;
 mod projects;
 mod utils;
 
-use redis::ConnectionAddr;
+use std::time::Duration;
+
+use redis::{AsyncConnectionConfig, ConnectionAddr};
 use topcoat::{
     asset::{AssetBundle, RouterBuilderAssetExt},
     router::{LayerFn, Path, Router, RouterBuilderDiscoverExt},
@@ -25,8 +27,26 @@ async fn main() -> anyhow::Result<()> {
 
     let redis_connection_addr =
         ConnectionAddr::Tcp(app_config.redis_host.clone(), app_config.redis_port);
-    let cache_client = redis::Client::open(redis_connection_addr)?;
-    let cache_connection = cache_client.get_multiplexed_async_connection().await?;
+    let cache_connection = match redis::Client::open(redis_connection_addr) {
+        Ok(client) => {
+            let config =
+                AsyncConnectionConfig::new().set_connection_timeout(Some(Duration::from_secs(2)));
+            match client
+                .get_multiplexed_async_connection_with_config(&config)
+                .await
+            {
+                Ok(conn) => Some(conn),
+                Err(err) => {
+                    tracing::warn!("redis unavailable, running without cache: {err}");
+                    None
+                }
+            }
+        }
+        Err(err) => {
+            tracing::warn!("invalid redis config, running without cache: {err}");
+            None
+        }
+    };
 
     // TODO: add a tracing middleware
     let router = Router::builder()

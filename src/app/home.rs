@@ -62,7 +62,7 @@ async fn home() -> Result {
 async fn project_results(cx: &Cx, reload: bool) -> Result {
     tracing::info!("Refreshing projects");
 
-    let cache_connection = app_context::<MultiplexedConnection>(cx);
+    let cache_connection = app_context::<Option<MultiplexedConnection>>(cx);
     let repositories = fetch_repositories(
         app_context::<AppConfig>(cx),
         cache_connection,
