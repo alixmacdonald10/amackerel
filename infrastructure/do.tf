@@ -27,7 +27,7 @@ resource "digitalocean_droplet" "amackerel" {
   user_data = templatefile("${path.module}/cloud-init.yaml.tftpl", {
     APP_IMAGE = var.image
     CF_TUNNEL_TOKEN = data.cloudflare_zero_trust_tunnel_cloudflared_token.amackerel.token
-    GITHUB_API_TOKEN = var.gh_api_token
+    GITHUB_TOKEN = var.gh_api_token
     COMPOSE_CONTENT = file("${path.module}/../compose.yaml")
   })
 }

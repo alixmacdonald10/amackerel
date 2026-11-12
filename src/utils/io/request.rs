@@ -1,82 +1,66 @@
 use std::str::FromStr;
 
+use anyhow::Result;
+use graphql_client::GraphQLQuery;
 use reqwest::header::{HeaderMap, HeaderName, HeaderValue};
-use serde::{Deserialize, Deserializer};
-use thiserror::Error;
+use secrecy::SecretString;
+use serde::Deserialize;
 
-/// Represents the response from a GraphQL API Call.
-///
-/// The success (data) and error (errors) fields returned
-/// are mapped to the familiar Rust Result format.
-///
-/// # Examples
-/// The below examples show a GraphQL response for a successful query
-/// and a failed query for reference.
-///
-/// ## Success
-/// ```json
-/// {
-///   "data": {
-///     "chronofile": {
-///       "name": "chronofile",
-///       "description": "A time-travelable file for Rust. ChronoFile is a drop-in for std::fs::File.",
-///       "stargazerCount": 0,
-///       "primaryLanguage": {
-///         "name": "Rust"
-///       },
-///       "languages": {
-///         "nodes": [
-///           {
-///             "name": "Rust"
-///           }
-///         ]
-///       }
-///     }
-///   }
-/// }
-/// ```
-///
-/// ## Failure
-///
-/// ```json
-/// {
-///   "errors": [
-///     {
-///       "message": "A query attribute must be specified and must be a string."
-///     }
-///   ]
-/// }
-/// ```
-#[derive(Deserialize, Debug)]
-pub enum GraphQLResult<T> {
-    #[serde(rename = "data")]
-    Ok(T),
-    #[serde(rename = "errors")]
-    Err(GraphQLError),
-}
+use crate::{
+    projects::RepositoryMeta,
+    utils::io::{
+        github::{compile_github_headers, GITHUB_API_URL},
+        request::repositories_query::ResponseData,
+    },
+};
 
-#[derive(Deserialize, Error, Debug)]
-#[serde(untagged)]
-pub enum GraphQLError {
-    #[serde(deserialize_with = "deserialize_graphql_query_errors")]
-    #[error("GraphQL query failed")]
-    Query(Vec<String>),
-}
+#[allow(clippy::upper_case_acronyms)]
+type URI = String;
 
-fn deserialize_graphql_query_errors<'de, D>(deserializer: D) -> Result<Vec<String>, D::Error>
-where
-    D: Deserializer<'de>,
-{
-    #[derive(Deserialize)]
-    struct GraphQLQueryErrors(Vec<GraphQLQueryError>);
+// The paths are relative to the directory where your `Cargo.toml` is located.
+// Both json and the GraphQL schema language are supported as sources for the schema
+#[derive(GraphQLQuery, Deserialize)]
+#[graphql(
+    schema_path = "queries/github_schema.json",
+    query_path = "queries/repositories/query.graphql",
+    response_derives = "Debug"
+)]
+pub struct RepositoriesQuery;
 
-    #[derive(Deserialize)]
-    struct GraphQLQueryError {
-        pub message: String,
+pub async fn perform_repositories_query(
+    variables: repositories_query::Variables,
+    client: &reqwest::Client,
+    token: &SecretString,
+) -> Result<Vec<RepositoryMeta>> {
+    let request_body = RepositoriesQuery::build_query(variables);
+
+    let headers = compile_github_headers(token)?;
+    let res = client
+        .post(format!("{GITHUB_API_URL}/graphql"))
+        .headers(headers.to_owned())
+        .json(&request_body)
+        .send()
+        .await?;
+
+    // TODO: tidy this up
+    match res.error_for_status() {
+        Ok(res) => {
+            let res = res.json::<graphql_client::Response<ResponseData>>().await?;
+
+            // TODO: handle graphQL errors
+            let data = res.data;
+            if let Some(data) = data {
+                Ok(data.into())
+            } else {
+                Err(anyhow::anyhow!("its buggered"))
+            }
+        }
+        Err(err) => Err(anyhow::anyhow!(
+            "An error occured. status code: {:?} message: {}",
+            err.status().unwrap_or_default(),
+            err
+        )),
     }
-
-    let errs = GraphQLQueryErrors::deserialize(deserializer)?;
-    Ok(errs.0.into_iter().map(|e| e.message).collect())
 }
 
 pub fn set_header(headers: &mut HeaderMap, name: &str, value: &str) -> anyhow::Result<()> {
@@ -159,37 +143,5 @@ mod tests {
 
         assert_eq!(headers["content-type"], "text/html");
         assert_eq!(headers.len(), 1);
-    }
-
-    #[test]
-    fn graphql_result_deserializes_a_successful_response() {
-        let json = serde_json::json!({ "data": { "name": "chronofile" } });
-
-        let result: GraphQLResult<serde_json::Value> =
-            serde_json::from_value(json).expect("should deserialize");
-
-        assert!(matches!(result, GraphQLResult::Ok(_)));
-    }
-
-    #[test]
-    fn graphql_result_deserializes_a_query_error_response() {
-        let json = serde_json::json!({
-            "errors": [
-                { "message": "A query attribute must be specified and must be a string." }
-            ]
-        });
-
-        let result: GraphQLResult<serde_json::Value> =
-            serde_json::from_value(json).expect("should deserialize");
-
-        match result {
-            GraphQLResult::Err(GraphQLError::Query(messages)) => {
-                assert_eq!(
-                    messages,
-                    vec!["A query attribute must be specified and must be a string."]
-                );
-            }
-            other => panic!("expected a query error, got {other:?}"),
-        }
     }
 }

@@ -8,8 +8,22 @@ services:
       - /var/log/amackerel:/var/log/amackerel/state
     environment:
       - XDG_STATE_HOME=/var/lib/amackerel/state
-      - RUST_LOG=amackerel=info,warn
-      - APP_GITHUB_TOKEN=${GITHUB_API_TOKEN}
+      - RUST_LOG=${RUST_LOG:-amackerel=info,warn}
+      - APP_GITHUB_TOKEN=${GITHUB_TOKEN}
+      - APP_REDIS_HOST=${REDIS_HOST:-redis}
+      - APP_REDIS_PORT=${REDIS_PORT:-6379}
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  redis:
+    image: redis:alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
 
   watchtower:
     image: nickfedor/watchtower

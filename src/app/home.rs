@@ -1,5 +1,4 @@
-use std::{collections::BTreeMap, sync::Arc};
-
+use redis::aio::MultiplexedConnection;
 use topcoat::{
     context::{app_context, Cx},
     icon::{icon, iconify::iconify_icon},
@@ -11,15 +10,13 @@ use topcoat::{
 
 use crate::{
     app::{INLINE_NAV_LINK_CSS, PARAGRAPH_CSS},
-    cache::{generate_cache_key, TTLCache},
     components::{
         alert::{alert, alert_description, alert_title, AlertVariant},
         card::{card, card_description, card_footer, card_header, card_title},
         empty::empty,
     },
     config::AppConfig,
-    projects::{load_projects, RepositoryMeta},
-    utils::io::github::CURATED_REPOS,
+    projects::{fetch_repositories, RepositoryMeta},
 };
 
 const LANGUAGES_CSS: StaticClass = class! {
@@ -64,71 +61,64 @@ async fn home() -> Result {
 #[shard]
 async fn project_results(cx: &Cx, reload: bool) -> Result {
     tracing::info!("Refreshing projects");
-    let now = std::time::Instant::now();
 
-    // TODO: a better way to impl this caching
-    let cache = app_context::<Arc<TTLCache>>(cx);
-    let key = generate_cache_key("load_projects", CURATED_REPOS.join(":").as_str());
-    let projects = if let Some(value) = cache.get::<BTreeMap<String, RepositoryMeta>>(&key) {
-        Ok((*value).clone())
-    } else {
-        let client = app_context::<reqwest::Client>(cx);
-        let app_config = app_context::<AppConfig>(cx);
-        load_projects(app_config, client, CURATED_REPOS).await
-    };
+    let cache_connection = app_context::<MultiplexedConnection>(cx);
+    let repositories = fetch_repositories(
+        app_context::<AppConfig>(cx),
+        cache_connection,
+        app_context::<reqwest::Client>(cx),
+    )
+    .await;
 
-    match projects {
-        Ok(map) if map.is_empty() => view! { empty() },
-        Ok(map) => {
-            let elapsed = now.elapsed();
-            tracing::info!("Func call time elapsed: {elapsed:#?}");
-
-            // TODO: This is silly and always updates the cache
-            let _ = cache.insert(&key, map.clone());
-
+    match repositories {
+        Ok(repos) if repos.is_empty() => {
+            tracing::info!("empty");
+            view! { empty() }
+        }
+        Ok(repos) => {
             view! { <ul>
-                for (_repo, RepositoryMeta { name, description, primary_language, languages, stars, url, .. }) in map {
-                    <li>
-                        <a href=(url) target="_blank" rel="noopener">
+            for RepositoryMeta { name, description, primary_language, languages, stars, url, .. } in repos {
+                <li>
+                    <a href=(url) target="_blank" rel="noopener">
                         card(
-                             attrs: attributes! { class=(class!(
-                                 "group m-4 overflow-hidden",
-                                 "transition duration-300 ease-in-out",
-                                 "hover:border-ring hover:-translate-y-1 hover:scale-105 hover:shadow-sm",
-                             )) },
-                             card_header(
-                                 card_title(
-                                     attrs: attributes! { class="text-xl font-bold transition-colors group-hover:text-primary" },
-                                     <span class="mr-2">(name)</span>
-                                     if stars > 0 {
-                                         <span class="text-sm font-normal text-muted-foreground/75">
-                                             ("★ ")
-                                             (stars)
-                                         </span>
-                                     }
-                                 )
-                                 card_description(
-                                     attrs: attributes! { class="text-base" },
-                                     (description)
-                                 )
-                             )
-                             card_footer(
-                                 attrs: attributes! { class="flex-wrap justify-center gap-2" },
+                            attrs: attributes! { class=(class!(
+                                "group m-4 overflow-hidden",
+                                "transition duration-300 ease-in-out",
+                                "hover:border-ring hover:-translate-y-1 hover:scale-105 hover:shadow-sm",
+                            )) },
+                            card_header(
+                                card_title(
+                                    attrs: attributes! { class="text-xl font-bold transition-colors group-hover:text-primary" },
+                                    <span class="mr-2">(name)</span>
+                                    if stars > 0 {
+                                        <span class="text-sm font-normal text-muted-foreground/75">
+                                        ("★ ")
+                                        (stars)
+                                        </span>
+                                    }
+                                )
+                                card_description(
+                                    attrs: attributes! { class="text-base" },
+                                    (description)
+                                )
+                            )
+                            card_footer(
+                                attrs: attributes! { class="flex-wrap justify-center gap-2" },
                                 <span class=(LANGUAGES_CSS)>
-                                    (&primary_language)
+                                (&primary_language)
                                 </span>
                                 for language in &languages {
                                     if language != &primary_language {
-                                         <span class=(LANGUAGES_CSS)>
-                                             (language.as_str())
-                                         </span>
+                                        <span class=(LANGUAGES_CSS)>
+                                            (language.as_str())
+                                        </span>
                                     }
                                 }
                             )
                         )
-                        </a>
-                    </li>
-                }
+                    </a>
+                </li>
+            }
             </ul> }
         }
         Err(err) => {
