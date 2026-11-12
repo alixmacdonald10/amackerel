@@ -20,10 +20,10 @@ write_files:
   # write .env 
   - path: /opt/amackerel/.env
     owner: root:root
-    permissions: "0644"
+    permissions: "0600"
     content: |
       APP_IMAGE=${APP_IMAGE}
-      GITHUB_API_TOKEN=${GITHUB_API_TOKEN}
+      GITHUB_TOKEN=${GITHUB_TOKEN}
 
   # systemd unit that runs docker compose.
   - path: /etc/systemd/system/app.service
