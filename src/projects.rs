@@ -181,7 +181,10 @@ mod tests {
         let amackerel = &repos[0];
         assert_eq!(amackerel.name, "amackerel");
         assert_eq!(amackerel.description, "Developer website");
-        assert_eq!(amackerel.url, "https://github.com/alixmacdonald10/amackerel");
+        assert_eq!(
+            amackerel.url,
+            "https://github.com/alixmacdonald10/amackerel"
+        );
         assert_eq!(amackerel.stars, 1);
         assert_eq!(amackerel.primary_language, "Rust");
         assert_eq!(
@@ -290,4 +293,3 @@ mod tests {
         assert_eq!(back.url, repo.url);
     }
 }
-

@@ -6,7 +6,6 @@ edition = "2021"
 [dependencies]
 anyhow = "1.0.104"
 config = "0.15.25"
-futures = "0.3"
 graphql_client = { version = "0.16.0", features = ["reqwest-rustls"] }
 redis = { version = "1.8.1", features = ["tokio-comp"] }
 redis-macros = "1.0.1"

@@ -1,6 +1,6 @@
 import { test, expect } from "@playwright/test";
 
-const BASE = "http://localhost:3000";
+const BASE = process.env.BASE_URL ?? "http://localhost:3000";
 
 test.describe("home page", () => {
   test("has projects title and header", async ({ page }) => {
@@ -21,24 +21,18 @@ test.describe("home page", () => {
     );
 
     // Projects are fetched live from GitHub, so the page can land in three
-    // states: populated list, empty state, or a load-error notice (no network
-    // / rate limited in CI). Handle each without flaking.
-    const emptyState = page.locator('img[alt="No projects yet"]');
-    const loadError = page.locator('img[alt="Failed to load projects"]');
+    // states: populated list, empty state (`empty` component text), or the
+    // "Failed to fetch data" alert (GitHub unreachable / rejected). Wait for
+    // one to render, then assert on whichever it is.
     const cards = page.locator("main ul > li");
+    const emptyState = page.getByText(
+      "Nothing here yet, I'm still fishing for ideas.",
+    );
+    const loadError = page.getByText("Failed to fetch data");
 
-    if (await emptyState.count()) {
-      await expect(emptyState).toBeVisible();
-      await expect(page.locator("body")).toContainText(
-        "Nothing here yet, I'm still fishing for ideas.",
-      );
-      await expect(cards).toHaveCount(0);
-    } else if (await loadError.count()) {
-      // Projects unreachable — show the error image + notice.
-      await expect(loadError).toBeVisible();
-      await expect(page.locator("body")).toContainText(
-        "Couldn't reel in the projects — try again later.",
-      );
+    await expect(cards.first().or(emptyState).or(loadError)).toBeVisible();
+
+    if ((await loadError.isVisible()) || (await emptyState.isVisible())) {
       await expect(cards).toHaveCount(0);
     } else {
       await expect(cards).not.toHaveCount(0);
