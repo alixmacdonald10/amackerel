@@ -29,4 +29,4 @@ services:
     image: nickfedor/watchtower
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
-    command: ["watchtower", "--interval", "300", "--cleanup", "amackerel"]
+    command: ["watchtower", "--interval", "300", "--cleanup", "amackerel-amackerel-1"]
